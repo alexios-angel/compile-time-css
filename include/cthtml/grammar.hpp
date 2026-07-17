@@ -3,54 +3,78 @@
 
 #include "../ctlark.hpp"
 
-// The grammar layer: the cthtml XML subset written in lark's grammar
-// language and parsed by ctlark. This grammar only tokenizes at all
-// because ctlark's lexer is CONTEXTUAL, like lark's: TEXT is a
-// candidate only where character data is expected, so it cannot
-// swallow attribute syntax inside a tag, and whitespace-only runs are
-// %ignore'd between attributes but arrive as TEXT tokens (dropped
-// later if blank) inside content.
+// The grammar layer: HTML5 written FLAT in lark's grammar language and
+// parsed by ctlark. Unlike XML, HTML tag nesting is not context-free -
+// end tags may be omitted (<li>, <p>, <td>...) and <html>/<head>/<body>
+// are implied - so the grammar does not nest elements at all: a
+// document is a sequence of chunks (open tags, close tags, text, whole
+// raw-text elements) and the tree-construction layer (treebuild.hpp)
+// builds the DOM from that stream the way a browser's tree builder
+// does.
 //
-// Terminals carry the spec load: tag-open tokens glue '<' to the name
-// (ASCII name characters plus every byte above 0x7F, so UTF-8 names
-// work), close tags are one token, entity references are validated
-// lexically (an undefined entity or a raw & is a lex error), comments
-// enforce the no "--" rule by construction, CDATA ends at the first
-// ]]>, and processing instructions (the XML declaration included) are
-// _-prefixed so they vanish from trees. DOCTYPE has no terminal at
-// all: rejected, by design.
+// The grammar only tokenizes because ctlark's lexer is CONTEXTUAL,
+// like lark's: TEXT is a candidate only where character data is
+// expected, and the *_BODY terminals are the only candidates right
+// after the ">" of a raw-text element's open tag, so <script>/<style>
+// (raw text) and <title>/<textarea> (RCDATA) swallow their content -
+// markup, "</div>", stray <, all of it - up to the first matching
+// close tag, unrolled letter by letter because the regex subset has no
+// lookarounds. The *_OPEN terminals take priority .2 so they beat OPEN
+// on a tie ("<script"), while "<scripty" still lexes as OPEN because
+// longest-match wins before priority breaks ties.
 //
-// What the grammar cannot say - a close tag must match its open tag,
-// attribute names must be unique, character references must be valid
-// code points - the binder (bind.hpp) checks, and is_valid includes.
+// Attributes may be double-quoted, single-quoted, unquoted (UNQVAL) or
+// bare boolean (the [...] maybe in attr). DOCTYPE and comments (HTML
+// rules: "--" is fine inside, the first --> ends it) are _-prefixed so
+// they vanish from trees; CDATA sections are tolerated and dropped the
+// same way. Entity references are NOT validated here - HTML never
+// rejects them, so the binder decodes known ones and leaves the rest
+// literal.
 
 namespace cthtml::detail {
 
-inline constexpr ctll::fixed_string xml_grammar = R"x(
-?start: (_COMMENT | _PI)* element (_COMMENT | _PI)*
+inline constexpr ctll::fixed_string html_grammar = R"x(
+start: (open_tag | script_el | style_el | title_el | textarea_el
+      | CLOSE | TEXT | _COMMENT | _CDATA | _DOCTYPE)*
 
-element: OPEN attr* "/>"
-       | OPEN attr* ">" (element | TEXT | CDATA | _COMMENT | _PI)* CLOSE
+open_tag: OPEN attr* ">"
+        | OPEN attr* "/>" -> self_tag
 
-attr: NAME "=" (DQVAL | SQVAL)
+script_el: SCRIPT_OPEN attr* ">" SCRIPT_BODY
+style_el: STYLE_OPEN attr* ">" STYLE_BODY
+title_el: TITLE_OPEN attr* ">" TITLE_BODY
+textarea_el: TEXTAREA_OPEN attr* ">" TEXTAREA_BODY
 
-OPEN: /<[A-Za-z_:\x80-\xff][A-Za-z0-9_:.\x80-\xff\-]*/
-CLOSE: /<\/[A-Za-z_:\x80-\xff][A-Za-z0-9_:.\x80-\xff\-]*[ \x09\x0a\x0d]*>/
-NAME: /[A-Za-z_:\x80-\xff][A-Za-z0-9_:.\x80-\xff\-]*/
-DQVAL: /"([^<"&]|&(lt|gt|amp|apos|quot|#[0-9]+|#x[0-9a-fA-F]+);)*"/
-SQVAL: /'([^<'&]|&(lt|gt|amp|apos|quot|#[0-9]+|#x[0-9a-fA-F]+);)*'/
-TEXT: /([^<&]|&(lt|gt|amp|apos|quot|#[0-9]+|#x[0-9a-fA-F]+);)+/
-CDATA: /<!\[CDATA\[([^\]]|\]+[^\]>])*\]+\]>/
-_COMMENT: /<!--([^-]|-[^-])*-->/
-_PI: /<\?([^?]|\?+[^?>])*\?+>/
+attr: NAME ["=" (DQVAL | SQVAL | UNQVAL)]
+
+SCRIPT_OPEN.2: /<script/i
+STYLE_OPEN.2: /<style/i
+TITLE_OPEN.2: /<title/i
+TEXTAREA_OPEN.2: /<textarea/i
+
+SCRIPT_BODY: /([^<]|<+[^\/<]|<+\/[^s<]|<+\/s[^c<]|<+\/sc[^r<]|<+\/scr[^i<]|<+\/scri[^p<]|<+\/scrip[^t<])*<+\/script[ \x09\x0a\x0d]*>/i
+STYLE_BODY: /([^<]|<+[^\/<]|<+\/[^s<]|<+\/s[^t<]|<+\/st[^y<]|<+\/sty[^l<]|<+\/styl[^e<])*<+\/style[ \x09\x0a\x0d]*>/i
+TITLE_BODY: /([^<]|<+[^\/<]|<+\/[^t<]|<+\/t[^i<]|<+\/ti[^t<]|<+\/tit[^l<]|<+\/titl[^e<])*<+\/title[ \x09\x0a\x0d]*>/i
+TEXTAREA_BODY: /([^<]|<+[^\/<]|<+\/[^t<]|<+\/t[^e<]|<+\/te[^x<]|<+\/tex[^t<]|<+\/text[^a<]|<+\/texta[^r<]|<+\/textar[^e<]|<+\/textare[^a<])*<+\/textarea[ \x09\x0a\x0d]*>/i
+
+OPEN: /<[A-Za-z][A-Za-z0-9:._\-]*/
+CLOSE: /<\/[A-Za-z][A-Za-z0-9:._\-]*[ \x09\x0a\x0d]*>/
+NAME: /[^ \x09\x0a\x0d\/>="'<]+/
+DQVAL: /"[^"]*"/
+SQVAL: /'[^']*'/
+UNQVAL: /[^ \x09\x0a\x0d"'=<>`]+/
+TEXT: /[^<]+/
+_DOCTYPE: /<!doctype[^>]*>/i
+_COMMENT: /<!--([^-]|-+[^->])*-+->/
+_CDATA: /<!\[CDATA\[([^\]]|\]+[^\]>])*\]+\]>/
 
 %ignore /[ \x09\x0a\x0d]+/
 )x";
 
-inline constexpr ctll::fixed_string xml_start = "start";
+inline constexpr ctll::fixed_string html_start = "start";
 
-static_assert(ctlark::grammar_valid<xml_grammar>,
-              "cthtml: internal error - the XML grammar failed to compile");
+static_assert(ctlark::grammar_valid<html_grammar>,
+              "cthtml: internal error - the HTML grammar failed to compile");
 
 } // namespace cthtml::detail
 

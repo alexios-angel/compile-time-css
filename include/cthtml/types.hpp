@@ -4,6 +4,7 @@
 #include "../ctll/fixed_string.hpp"
 #ifndef CTHTML_IN_A_MODULE
 #include <cstddef>
+#include <initializer_list>
 #include <string_view>
 #include <type_traits>
 #endif
@@ -58,6 +59,44 @@ template <auto... Chars> struct text {
 	}
 };
 
+namespace detail {
+
+// HTML names are case-insensitive; cthtml stores them lowercase and
+// folds lookups, so doc.get<"DIV">() and doc["Div"] both hit
+constexpr char ascii_lower(char c) noexcept {
+	return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+constexpr bool ascii_iequals(std::string_view a, std::string_view b) noexcept {
+	if (a.size() != b.size()) {
+		return false;
+	}
+	for (size_t i = 0; i < a.size(); ++i) {
+		if (ascii_lower(a[i]) != ascii_lower(b[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+// HTML's void elements take no close tag; script/style hold raw text
+// (never entity-encoded). Both the tree builder and the serializer care.
+constexpr bool is_void_tag(std::string_view t) noexcept {
+	for (const std::string_view s : {"area", "base", "br", "col", "embed", "hr", "img",
+	                                 "input", "link", "meta", "source", "track", "wbr"}) {
+		if (ascii_iequals(t, s)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+constexpr bool is_raw_text_tag(std::string_view t) noexcept {
+	return ascii_iequals(t, "script") || ascii_iequals(t, "style");
+}
+
+} // namespace detail
+
 // --- attributes
 
 template <typename Name, typename Value> struct attribute {
@@ -95,7 +134,7 @@ CTLL_EXPORT struct node_view {
 	constexpr bool empty() const noexcept { return children == 0; }
 	constexpr node_view operator[](std::string_view name) const noexcept {
 		for (size_t i = 0; i < children; ++i)
-			if (child_data[i].type == kind::element && child_data[i].tag == name) return child_data[i];
+			if (child_data[i].type == kind::element && detail::ascii_iequals(child_data[i].tag, name)) return child_data[i];
 		return {};
 	}
 	constexpr node_view operator[](size_t index) const noexcept {
@@ -103,20 +142,20 @@ CTLL_EXPORT struct node_view {
 	}
 	constexpr bool contains(std::string_view name) const noexcept {
 		for (size_t i = 0; i < children; ++i)
-			if (child_data[i].type == kind::element && child_data[i].tag == name) return true;
+			if (child_data[i].type == kind::element && detail::ascii_iequals(child_data[i].tag, name)) return true;
 		return false;
 	}
 	constexpr size_t count(std::string_view name) const noexcept {
 		size_t n = 0;
-		for (size_t i = 0; i < children; ++i) n += child_data[i].type == kind::element && child_data[i].tag == name;
+		for (size_t i = 0; i < children; ++i) n += child_data[i].type == kind::element && detail::ascii_iequals(child_data[i].tag, name);
 		return n;
 	}
 	constexpr bool has_attribute(std::string_view name) const noexcept {
-		for (size_t i = 0; i < attrs; ++i) if (attribute_data[i].name == name) return true;
+		for (size_t i = 0; i < attrs; ++i) if (detail::ascii_iequals(attribute_data[i].name, name)) return true;
 		return false;
 	}
 	constexpr std::string_view attribute(std::string_view name) const noexcept {
-		for (size_t i = 0; i < attrs; ++i) if (attribute_data[i].name == name) return attribute_data[i].value;
+		for (size_t i = 0; i < attrs; ++i) if (detail::ascii_iequals(attribute_data[i].name, name)) return attribute_data[i].value;
 		return {};
 	}
 	constexpr const node_view * begin() const noexcept { return child_data; }
@@ -139,7 +178,10 @@ template <const auto & Key, typename Text> constexpr bool text_matches() noexcep
 		return false;
 	}
 	for (size_t i = 0; i < view.size(); ++i) {
-		if (static_cast<char32_t>(static_cast<unsigned char>(view[i])) != Key[i]) {
+		// names compare case-insensitively (stored lowercase already)
+		const char32_t k = Key[i];
+		const char32_t kf = (k >= U'A' && k <= U'Z') ? k - U'A' + U'a' : k;
+		if (static_cast<char32_t>(static_cast<unsigned char>(ascii_lower(view[i]))) != kf) {
 			return false;
 		}
 	}

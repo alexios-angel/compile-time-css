@@ -9,15 +9,21 @@
 #endif
 
 // Compile-time serialization: cthtml::serialize(doc) renders any element
-// back to minified XML in static storage and returns a std::string_view
+// back to minified HTML in static storage and returns a std::string_view
 // of it - nothing happens at runtime.
 //
-//   constexpr auto doc = cthtml::parse<"<a  x='1' >hi<b/></a>">();
-//   static_assert(cthtml::serialize(doc) == R"(<a x="1">hi<b/></a>)");
+//   constexpr auto doc = cthtml::parse<"<ul id=nav><li>Docs</ul>">();
+//   static_assert(cthtml::serialize(doc) ==
+//                 R"(<html><head></head><body><ul id="nav"><li>Docs</li></ul></body></html>)");
 //
-// Attribute values are double-quoted with & < " escaped; text content
-// escapes & < >; everything else, including multi-byte UTF-8, passes
-// through as-is. Elements without children use the self-closing form.
+// HTML output rules: void elements render as <br> - no slash, no close
+// tag - other childless elements as <div></div>; attributes with empty
+// values render bare (disabled, not disabled=""); names are already
+// canonical lowercase. Attribute values are double-quoted with & "
+// escaped; text content escapes & < >; the bodies of <script>/<style>
+// pass through raw (a document produced by parse<> can never contain
+// its own close tag there - the lexer would have ended the element).
+// Everything else, multi-byte UTF-8 included, passes through as-is.
 
 namespace cthtml {
 
@@ -62,20 +68,29 @@ template <auto... Cs> constexpr size_t serialized_size(text<Cs...>) noexcept {
 template <typename Name, typename... Attributes, typename... Children>
 constexpr size_t serialized_size(element<Name, ctll::list<Attributes...>, Children...>) noexcept {
 	size_t total = 1 + Name::size(); // <name
-	// attributes: space name="value"
-	((total += 1 + Attributes::name_type::size() + 2 + [] {
-		size_t value = 0;
-		constexpr auto view = Attributes::value_type::view();
-		for (const char c : view) {
-			value += escaped_size(c, true);
-		}
-		return value;
-	}() + 1), ...);
+	// attributes: space name="value", or bare space name when empty
+	((total += 1 + Attributes::name_type::size() +
+	           (Attributes::value_type::size() == 0 ? 0 : 2 + [] {
+		           size_t value = 0;
+		           constexpr auto view = Attributes::value_type::view();
+		           for (const char c : view) {
+			           value += escaped_size(c, true);
+		           }
+		           return value;
+	           }() + 1)),
+	 ...);
+	total += 1; // >
 	if constexpr (sizeof...(Children) == 0) {
-		total += 2; // />
+		if (!is_void_tag(Name::view())) {
+			total += 2 + Name::size() + 1; // </name>
+		}
 	} else {
-		total += 1; // >
-		((total += serialized_size(Children{})), ...);
+		if constexpr (is_raw_text_tag(Name::view())) {
+			// script/style bodies pass through unescaped
+			((total += Children::size()), ...);
+		} else {
+			((total += serialized_size(Children{})), ...);
+		}
 		total += 2 + Name::size() + 1; // </name>
 	}
 	return total;
@@ -101,18 +116,28 @@ constexpr char * serialize_to(char * out, element<Name, ctll::list<Attributes...
 	out = write_raw(out, Name::view());
 	((out = write_raw(out, " "),
 	  out = write_raw(out, Attributes::name_type::view()),
-	  out = write_raw(out, "=\""),
 	  [&] {
-		for (const char c : Attributes::value_type::view()) {
-			out = write_escaped(out, c, true);
+		if constexpr (Attributes::value_type::size() != 0) {
+			out = write_raw(out, "=\"");
+			for (const char c : Attributes::value_type::view()) {
+				out = write_escaped(out, c, true);
+			}
+			out = write_raw(out, "\"");
 		}
-	  }(),
-	  out = write_raw(out, "\"")), ...);
+	  }()), ...);
+	*out++ = '>';
 	if constexpr (sizeof...(Children) == 0) {
-		out = write_raw(out, "/>");
+		if (!is_void_tag(Name::view())) {
+			out = write_raw(out, "</");
+			out = write_raw(out, Name::view());
+			*out++ = '>';
+		}
 	} else {
-		*out++ = '>';
-		((out = serialize_to(out, Children{})), ...);
+		if constexpr (is_raw_text_tag(Name::view())) {
+			((out = write_raw(out, Children::view())), ...);
+		} else {
+			((out = serialize_to(out, Children{})), ...);
+		}
 		out = write_raw(out, "</");
 		out = write_raw(out, Name::view());
 		*out++ = '>';
