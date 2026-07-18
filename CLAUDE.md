@@ -1,14 +1,13 @@
-# CLAUDE.md — compile-time-html (ctcss)
+# CLAUDE.md — compile-time-css (ctcss)
 
-Header-only, compile-time (constexpr) HTML5 parser. A document is a
-*type*: `ctcss::parse<...>()` always yields `html > (head, body)` like a
-browser DOM; broken markup is a compile error (or `false` from
-`is_valid`). HTML5 conveniences (void elements, optional end tags,
-implied html/head/body, case-insensitive names, boolean/unquoted
-attributes, DOCTYPE, raw-text script/style) parse silently; author
-mistakes (stray/crossing close tags, duplicate attributes, `<div/>`)
-are errors. Namespace `ctcss`. Compile-time ONLY — no runtime document
-load. Work on `main`. Prefer `rg` over `grep`.
+Header-only, compile-time (constexpr) CSS parser AND resolver. A
+stylesheet is a *type*: `ctcss::parse<...>()`, every accessor
+constexpr, malformed CSS a compile error (or `false` from `is_valid`).
+Selector matching and the cascade (`!important` → specificity → source
+order) are VALUE computations over flattened static views, so
+`matches()`/`query()` run in static_asserts against a compile-time DOM
+chain and equally at runtime (a browser restyling after a script
+mutation). Namespace `ctcss`. Work on `main`. Prefer `rg` over `grep`.
 
 ## Build & test — "compiling the tests IS the test"
 Tests under `tests/*.cpp` are `static_assert` suites; each compiles to a `.o`.
@@ -20,79 +19,39 @@ make clean
 cmake -B build && cmake --build build && ctest --test-dir build
 ```
 Flags are `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — keep every
-change warning-clean. A PCH of the umbrella header (`make pch`, done
-automatically) compiles the grammar + tables ONCE; TUs start from the baked
-result. gcc uses `include/ctcss.hpp.gch`; clang uses `ctcss.pch` (`-include-pch`).
+change warning-clean. The PCH (`make pch`, automatic) bakes the grammar
+tables once — the CSS grammar is SMALL, so this is quick (unlike ctjs).
 
 ## Layout
-- `include/ctcss.hpp` — umbrella (includes the pieces below); public API.
-- `include/ctcss/grammar.hpp` — the HTML grammar as a **lark grammar string**, deliberately FLAT (HTML nesting is not context-free): it lexes a chunk stream; raw-text `*_BODY` terminals ride ctlark's contextual lexing.
-- `include/ctcss/bind.hpp` — lowers chunks: lowercased names, 3 attribute value flavours + booleans, HTML character-reference decoding (never fails), raw-body close-tag stripping.
-- `include/ctcss/treebuild.hpp` — HTML5 tree construction, TWO passes: a value-level validator (name stack → first `bind_error_t`; all `is_valid` costs) and a type-level fold (frame stack → the document type; total, never errors on its own).
-- `include/ctcss/entities.hpp` — GENERATED WHATWG named-reference table; regenerate with `python3 tools/gen-entities.py`, never edit by hand.
-- `include/ctcss/types.hpp` — `element` / `text` node types, `kind` enum, accessors, case-insensitive matching (`ascii_iequals`, `is_void_tag`).
-- `include/ctcss/views.hpp` — `node_view` / `attribute_view` (uniform runtime views for `operator[]`, iteration).
-- `include/ctcss/serialize.hpp` — `serialize()` back to minified HTML (voids bare, boolean attrs bare, raw script/style bodies unescaped).
-- `external/compile-time-lark/` — git SUBMODULE providing ctlark + ctll (see GOTCHAS).
-- `tests/` (`document.cpp` — a real page, `html5.cpp` — the feature matrix, `cxx17.cpp`), `examples/` (`page`, `wellformed`, `introspection`, `iteration`), `single-header/ctcss.hpp`, `ctcss.cppm` (module, `import std`).
+- `include/ctcss.hpp` — umbrella; public API (`is_valid`, `parse`, `error_info/message`, `debug::*`).
+- `include/ctcss/grammar.hpp` — the CSS subset as a **lark grammar string**. TWO load-bearing tricks: a COMPOUND selector ("div.note#top") is ONE token (whitespace adjacency of compounds IS the descendant combinator — that's how it survives %ignore; ">" is child), and a declaration VALUE is one raw token up to `;`/`}`.
+- `include/ctcss/bind.hpp` — lowers the tree: splits COMPOUND text into typed tag/#id/.classes (tags fold to lowercase; a later #id wins), trims values, peels `!important` (also "! important", any case).
+- `include/ctcss/types.hpp` — `text`, `compound`, `sel_step<C, rel>` (rel = how the step attaches to the one on its LEFT), `selector` (packed specificity = ids*10000 + classes*100 + types), `declaration`, `rule` (with case-insensitive `property<"key">()`), `stylesheet`, `for_each_rule`.
+- `include/ctcss/match.hpp` — the browser seam: `element_ref{tag,id,classes}` (classes space-separated), per-selector/per-sheet STATIC VIEWS (`selector_data`, `sheet_data`: one `decl_entry` per selector × declaration), `matches()` (right-to-left with descendant backtracking), `query()` (the cascade), `entries()`.
+- `include/ctcss/values.hpp` — `parse_length` (px/em/rem/%/vw/vh, unitless 0), `parse_color` (#rgb[a]/#rrggbb[aa], rgb()/rgba() with clamping, named colors, transparent), all constexpr.
+- `include/ctcss/serialize.hpp` — minified CSS from the sheet type.
+- `external/compile-time-lark/` — git SUBMODULE (ctlark + ctll). Never edit here.
+- `tests/` (`document.cpp` — a real sheet end-to-end, `css.cpp` — the feature matrix, `cxx17.cpp`), `examples/` (`theme`, `wellformed`).
 
-## Public API (all `template <fixed_string input>`)
-- `ctcss::is_valid<input>` — `bool`, never a compile error.
-- `ctcss::parse<input>()` — the `html` root element; invalid HTML fails the build with a message naming the query to run.
-- `ctcss::error_info<input>()` / `error_message<input>()` — syntax failure location + expected tokens (rendered caret).
-- `ctcss::bind_error<input>()` — why a document that PARSES is rejected: `bind_reason::{stray_end_tag, mismatched_tag, duplicate_attribute, self_closing_non_void, depth_overflow}` (defined in `bind.hpp`), plus `.where`.
-- `ctcss::serialize(...)`, `ctcss::for_each_child`, `ctcss::for_each_attribute`, `attributes(...)`.
-- `ctcss::debug::{traced_parse, parse_runtime, dump_tokens, dump_grammar}` — ctlark toolbox with the HTML grammar baked in.
-- Diagnostics macros: `CTLARK_VERBOSE_ERRORS`, `CTLARK_DEBUG`, `CTLARK_CONSTEXPR_ASSERT`.
-
-## Conventions
-- C++17/C++20 split via `CTLL_CNTTP_COMPILER_CHECK`: C++20 takes string-literal
-  NTTPs; C++17 takes a `const auto&` to a `constexpr ctll::fixed_string`
-  variable with linkage. Test both — `cxx17.cpp` guards the C++17 form.
-- Constexpr/Earley parsing needs HUGE budgets (Makefile sets them; CMake
-  attaches via `CTCSS_CONSTEXPR_LIMITS`, opt out `-DCTCSS_CONSTEXPR_LIMITS=OFF`):
-  - gcc: `-fconstexpr-ops-limit=3000000000 -fconstexpr-loop-limit=10000000 -fconstexpr-depth=1024`
-  - clang: `-fconstexpr-steps=500000000 -fconstexpr-depth=1024 -fbracket-depth=2048`
-  Hitting the compiler's own step cap is a distinct failure from the library's
-  queryable overflow/depth errors.
-- CMake toggles: `CTCSS_PCH`, `CTCSS_BUILD_TESTS`, `CTCSS_BUILD_EXAMPLES`, `CTCSS_CXX_STANDARD` (default 20), `CTCSS_MODULE`.
-
-## HTML semantics decisions (keep these consistent)
-- Every parse synthesizes `html > (head, body)`; explicit
-  `<html>/<head>/<body>` tags merge attributes, never nest. Metadata
-  before content → head; after content starts → stays in body.
-- Auto-close applies at the TOP of the open stack only (documented v0.1
-  divergence: `<p>a<b>c<p>` nests the second p inside b).
-- `</body>`/`</html>` close open elements only through omissible end
-  tags; EOF closes anything. `</head>` is only valid while in head.
-- Whitespace-only text is dropped except inside `<pre>`/`<textarea>`;
-  one leading newline after `<pre>`/`<textarea>` open is stripped.
-- References decode leniently (unknown → literal); entity names are
-  case-SENSITIVE but tag/attr names fold to lowercase at lift time —
-  lookups fold too.
-- Raw-text limits (documented): a literal `</script` in script content
-  must be followed by `>` or whitespace-`>`; `a < b` in text is a lex
-  error (write `&lt;`).
+## Semantics decisions (keep consistent; README documents all)
+- Chains are ROOT-FIRST, self-last. Tags match case-insensitively
+  (bind folds selector tags to lowercase; cthtml tags are lowercase);
+  classes/ids exact. The same element cannot satisfy two steps.
+- v0.1 rejects (compile errors): at-rules, pseudo-classes/elements,
+  attribute selectors, `+`/`~` combinators; `;`/`}` cannot appear
+  inside quoted values (the VALUE token stops there).
+- Values stay RAW text; typed parsing (`parse_length`/`parse_color`)
+  happens on demand. Property names fold to lowercase, lookups fold too.
+- Cascade in `query`: important > specificity > source order; order =
+  document position of the declaration (selector-list twins share it).
 
 ## GOTCHAS
-- **ctlark and ctll are a git SUBMODULE, never edit here:**
-  `external/compile-time-lark` — run `git submodule update --init` once
-  after cloning; bump by checking out a new commit inside the submodule and
-  committing the gitlink. The build adds `<sub>/include` AND
-  `<sub>/include/ctlark` / `<sub>/include/ctll` to the include path so the
-  headers' relative `"../ctlark.hpp"`-style includes resolve via the
-  quoted-include fallback; the CMake install flattens everything back to
-  include/{ctcss,ctlark,ctll}. Regenerate the single-header after bumps.
-- **single-header** — `make single-header` (needs `quom`); prepends `LICENSE`,
-  amalgamates `include/ctcss.hpp` into `single-header/ctcss.hpp`.
-- **entities.hpp is generated** — `python3 tools/gen-entities.py` (data
-  from CPython's `html.entities.html5`, i.e. the WHATWG table); commit
-  the result, never hand-edit.
-- **Grammar tables via Tablewright** — the only generated table left is
-  ctlark's own `lark.hpp` (the grammar-of-grammars), which lives in the
-  compile-time-lark submodule; regenerate it THERE (`make regrammar` in
-  compile-time-lark). ctcss's own HTML grammar is a plain data string in
-  `grammar.hpp` — no codegen step.
-- **Attribution** — CTLL is Hana Dusíková's (via `notre`, from CTRE); the Lark
-  grammar language is the lark-parser project's; the entity data is the
-  WHATWG's. Preserve `NOTICE` and `LICENSE` (Apache-2.0 w/ LLVM Exceptions).
+- **ctlark and ctll are a git SUBMODULE**: `git submodule update
+  --init` once; bump = checkout in submodule + commit gitlink; build
+  adds `<sub>/include` + `/ctlark` + `/ctll` to -I (quoted-include
+  fallback). CMake install flattens to include/{ctcss,ctlark,ctll}.
+- **single-header** — `make single-header` (needs `quom`); prepends LICENSE.
+- **Attribution** — CTLL is Hana Dusíková's (via `notre`, from CTRE);
+  the Lark grammar language is the lark-parser project's; CSS
+  semantics follow the W3C specs. Preserve `NOTICE` and `LICENSE`
+  (Apache-2.0 w/ LLVM Exceptions).

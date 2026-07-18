@@ -15,10 +15,10 @@ if(NOT CMAKE_EXPERIMENTAL_CXX_STD AND NOT CMAKE_CXX_MODULE_STD)
 endif()
 
 project(ctcss
-  HOMEPAGE_URL "https://github.com/alexios-angel/compile-time-html"
+  HOMEPAGE_URL "https://github.com/alexios-angel/compile-time-css"
   VERSION 0.1.0
   LANGUAGES CXX)
-set(PROJECT_DESCRIPTION "Compile-time HTML5: parse while you compile, query the DOM with constexpr accessors.")
+set(PROJECT_DESCRIPTION "Compile-time CSS: parse while you compile, match selectors and resolve the cascade with constexpr.")
 
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
@@ -70,12 +70,11 @@ endif()
 set(CTCSS_HEADERS
 	include/ctcss.hpp
 	include/ctcss/bind.hpp
-	include/ctcss/entities.hpp
 	include/ctcss/grammar.hpp
+	include/ctcss/match.hpp
 	include/ctcss/serialize.hpp
-	include/ctcss/treebuild.hpp
 	include/ctcss/types.hpp
-	include/ctcss/views.hpp)
+	include/ctcss/values.hpp)
 file(GLOB_RECURSE CTCSS_CTLARK_HEADERS CONFIGURE_DEPENDS
 	external/compile-time-lark/include/*.hpp)
 
