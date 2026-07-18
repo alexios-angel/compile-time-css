@@ -1,5 +1,5 @@
 # the suite is static_asserts: compiling a test IS running it
-add_custom_target(cthtml-test ALL)
+add_custom_target(ctcss-test ALL)
 
 file(GLOB test-sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
@@ -10,23 +10,23 @@ set(runtime-tests "")
 foreach(source ${test-sources})
   get_filename_component(test "${source}" NAME_WE)
   if(test IN_LIST runtime-tests)
-    add_executable(cthtml-test-${test} "${source}")
-    target_link_libraries(cthtml-test-${test} PRIVATE cthtml::cthtml)
-    if(CTHTML_PCH AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
-      target_precompile_headers(cthtml-test-${test} PRIVATE
-        "${PROJECT_SOURCE_DIR}/include/cthtml.hpp")
+    add_executable(ctcss-test-${test} "${source}")
+    target_link_libraries(ctcss-test-${test} PRIVATE ctcss::ctcss)
+    if(CTCSS_PCH AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
+      target_precompile_headers(ctcss-test-${test} PRIVATE
+        "${PROJECT_SOURCE_DIR}/include/ctcss.hpp")
     endif()
-    add_dependencies(cthtml-test cthtml-test-${test})
-    add_test(NAME run-${test} COMMAND cthtml-test-${test})
+    add_dependencies(ctcss-test ctcss-test-${test})
+    add_test(NAME run-${test} COMMAND ctcss-test-${test})
   else()
-    add_library(cthtml-test-${test} OBJECT EXCLUDE_FROM_ALL "${source}")
-    target_link_libraries(cthtml-test-${test} PRIVATE cthtml::cthtml)
-    if(CTHTML_PCH AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
-      target_precompile_headers(cthtml-test-${test} PRIVATE
-        "${PROJECT_SOURCE_DIR}/include/cthtml.hpp")
+    add_library(ctcss-test-${test} OBJECT EXCLUDE_FROM_ALL "${source}")
+    target_link_libraries(ctcss-test-${test} PRIVATE ctcss::ctcss)
+    if(CTCSS_PCH AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
+      target_precompile_headers(ctcss-test-${test} PRIVATE
+        "${PROJECT_SOURCE_DIR}/include/ctcss.hpp")
     endif()
-    add_dependencies(cthtml-test cthtml-test-${test})
+    add_dependencies(ctcss-test ctcss-test-${test})
     add_test(NAME compile-${test}
-      COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target cthtml-test-${test})
+      COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target ctcss-test-${test})
   endif()
 endforeach()
