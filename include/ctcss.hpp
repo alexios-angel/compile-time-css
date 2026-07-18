@@ -4,43 +4,39 @@
 #include "ctlark.hpp"
 #include "ctcss/grammar.hpp"
 #include "ctcss/types.hpp"
-#include "ctcss/entities.hpp"
 #include "ctcss/bind.hpp"
-#include "ctcss/treebuild.hpp"
+#include "ctcss/values.hpp"
+#include "ctcss/match.hpp"
 #include "ctcss/serialize.hpp"
-#include "ctcss/views.hpp"
 
-// ctcss: compile-time HTML5.
+// ctcss: compile-time CSS.
 //
-//   constexpr auto doc = ctcss::parse<R"(
-//       <!DOCTYPE html>
-//       <title>Hi</title>
-//       <ul id=nav>
-//           <li>Docs
-//           <li>Code
-//       </ul>)">();
+//   constexpr auto sheet = ctcss::parse<R"(
+//       p        { color: black; margin: 8px; }
+//       div.note p { color: red !important; }
+//       #main    { width: 640px; }
+//   )">();
 //
-//   static_assert(doc.name() == "html");
-//   static_assert(doc.get<"head">().get<"title">().text() == "Hi");
-//   static_assert(doc.get<"body">().get<"ul">().count<"li">() == 2);
-//   static_assert(ctcss::is_valid<"<p>fragments are fine">);
-//   static_assert(!ctcss::is_valid<"<b><i>misnested</b></i>">);
+//   constexpr ctcss::element_ref chain[] = {
+//       {"body"}, {"div", "", "note wide"}, {"p"}};
+//   static_assert(ctcss::query(sheet, chain, "color") == "red");
+//   static_assert(ctcss::query(sheet, chain, "margin") == "8px");
+//   static_assert(ctcss::parse_length("8px").value == 8);
+//   static_assert(!ctcss::is_valid<"p { color red }">);
 //
-// The document is parsed while your code compiles, and the result is a
-// TYPE - html > (head, body), like a browser DOM - whose accessors are
-// all constexpr. HTML5's conveniences are understood: void elements
-// (<br>), optional end tags (<li>, <p>, <td>...), implied
-// <html>/<head>/<body>, case-insensitive names, boolean and unquoted
-// attributes, DOCTYPE, raw-text <script>/<style> and RCDATA
-// <title>/<textarea>, named and numeric character references. Author
-// MISTAKES are compile errors (or `false` from is_valid): a stray or
-// crossing close tag, a duplicate attribute, <div/>.
+// The stylesheet is parsed while your code compiles - malformed CSS is
+// a compile error, or `false` from is_valid - and the sheet is a TYPE
+// whose every accessor is constexpr. Selector matching and the cascade
+// (!important, specificity, source order) are VALUE computations over
+// flattened static views, so they run in static_asserts against a
+// compile-time DOM chain and equally well at runtime, when a script
+// has just flipped a class and styles need resolving again.
 //
-// The grammar layer is ctlark (compile-time Lark): grammar.hpp lexes
-// the document into a FLAT chunk stream - HTML tag nesting is not
-// context-free - bind.hpp lowers chunks (names, attributes, character
-// references), and treebuild.hpp runs the HTML5 tree-construction
-// logic that a browser's parser would, at compile time.
+// The grammar layer is ctlark (compile-time Lark): compound selectors
+// are single tokens (whitespace adjacency IS the descendant
+// combinator - see grammar.hpp), the binder (bind.hpp) splits them
+// into typed tag/#id/.classes parts and cooks declaration values, and
+// match.hpp supplies element_ref chains, matches() and query().
 
 namespace ctcss {
 
@@ -51,89 +47,57 @@ namespace ctcss {
 #define CTCSS_STRING_INPUT const auto &
 #endif
 
-namespace detail {
-
-// grammar validity is a given (static_assert in grammar.hpp); input
-// validity is the parse plus tree construction's well-formedness walk
-template <CTCSS_STRING_INPUT input> constexpr bool valid_document() noexcept {
-	if constexpr (!ctlark::is_valid<html_grammar, input, html_start>) {
-		return false;
-	} else {
-		return treebuild<decltype(ctlark::parse<html_grammar, input, html_start>())>::ok;
-	}
-}
-
-} // namespace detail
-
-// does the input parse as acceptable HTML5 (within the supported subset)?
+// does the input parse as CSS (within the supported subset)?
 CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr bool is_valid =
-	detail::valid_document<input>();
+	ctlark::is_valid<detail::css_grammar, input, detail::css_start>;
 
 // what failed and where, when it does not: kind, byte offset, line,
 // column and the expected terminals (kind none = the syntax is fine)
 CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr ctlark::error_info_t error_info() noexcept {
-	return ctlark::error_info<detail::html_grammar, input, detail::html_start>();
+	return ctlark::error_info<detail::css_grammar, input, detail::css_start>();
 }
 
 // the rendered diagnostic - location, snippet with a caret, expected
 // terminals - as a static string ("" when the syntax is fine)
 CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr std::string_view error_message() noexcept {
-	return ctlark::error_message<detail::html_grammar, input, detail::html_start>();
+	return ctlark::error_message<detail::css_grammar, input, detail::css_start>();
 }
 
-// why tree construction rejected a document that PARSES - a stray or
-// crossing close tag, a duplicate attribute, a self-closed non-void;
-// reason none when the document is valid or the syntax already failed
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr bind_error_t bind_error() noexcept {
-	if constexpr (!ctlark::is_valid<detail::html_grammar, input, detail::html_start>) {
-		return bind_error_t{};
-	} else {
-		return detail::treebuild<decltype(ctlark::parse<detail::html_grammar, input, detail::html_start>())>::fail;
-	}
-}
-
-// parse the input into its html root element; invalid HTML fails to
-// compile. The result is always html > (head, body): fragments land in
-// body, metadata elements in head, like a browser DOM.
+// parse the input into its stylesheet type; invalid CSS fails the build
 CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr auto parse() noexcept {
 #ifdef CTLARK_VERBOSE_ERRORS
-	(void)ctlark::verbose_report<detail::html_grammar, input, detail::html_start>();
+	(void)ctlark::verbose_report<detail::css_grammar, input, detail::css_start>();
 #endif
-	static_assert(ctlark::is_valid<detail::html_grammar, input, detail::html_start>,
-	              "ctcss: the input is not lexable/parsable HTML - print ctcss::error_message<input>() "
-	              "for the location and the expected tokens");
-	static_assert(!ctlark::is_valid<detail::html_grammar, input, detail::html_start> || is_valid<input>,
-	              "ctcss: the input parses but is not acceptable HTML (stray or crossing close tag, "
-	              "duplicate attribute, or self-closed non-void element) - print "
-	              "ctcss::bind_error<input>() for the reason");
+	static_assert(ctlark::is_valid<detail::css_grammar, input, detail::css_start>,
+	              "ctcss: the input is not valid CSS (within the supported subset) - print "
+	              "ctcss::error_message<input>() for the location and the expected tokens");
 	if constexpr (is_valid<input>) {
-		using built = detail::treebuild<decltype(ctlark::parse<detail::html_grammar, input, detail::html_start>())>;
-		return typename built::type{};
+		using bound = detail::bind_sheet<
+		    decltype(ctlark::parse<detail::css_grammar, input, detail::css_start>())>;
+		return typename bound::type{};
 	} else {
-		return element<text<>, ctll::list<>>{};
+		return stylesheet<>{};
 	}
 }
 
-// the ctlark debugging toolbox with the HTML grammar baked in: traced
-// parses (also runnable at runtime under a debugger), runtime inputs
-// against the compile-time tables, token and grammar dumps
+// the ctlark debugging toolbox with the CSS grammar baked in
 namespace debug {
 
 CTLL_EXPORT template <CTCSS_STRING_INPUT input, size_t Cap = 4096> constexpr auto traced_parse() noexcept {
-	return ctlark::debug::traced_parse<detail::html_grammar, input, detail::html_start, Cap>();
+	return ctlark::debug::traced_parse<detail::css_grammar, input, detail::css_start, Cap>();
 }
 
 CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr std::string_view dump_tokens() noexcept {
-	return ctlark::debug::dump_tokens<detail::html_grammar, input, detail::html_start>();
+	return ctlark::debug::dump_tokens<detail::css_grammar, input, detail::css_start>();
 }
 
 CTLL_EXPORT constexpr std::string_view dump_grammar() noexcept {
-	return ctlark::debug::dump_grammar<detail::html_grammar>();
+	return ctlark::debug::dump_grammar<detail::css_grammar>();
 }
 
 CTLL_EXPORT template <size_t MaxTokens = 1024>
 ctlark::debug::runtime_result parse_runtime(std::string_view in) {
-	return ctlark::debug::parse_runtime<detail::html_grammar, MaxTokens>(in, "start");
+	return ctlark::debug::parse_runtime<detail::css_grammar, MaxTokens>(in, "start");
 }
 
 } // namespace debug
