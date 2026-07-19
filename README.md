@@ -38,8 +38,10 @@ static_assert(!ctcss::is_valid<"p { color red }">);             // typos fail th
 
 ## What is supported (v0.1)
 
-* **rules**: selector lists (`h1, .title { ... }`) with declaration
-  blocks; the final semicolon is optional; `/* comments */` anywhere
+* **rules**:
+  - selector lists (`h1, .title { ... }`) with declaration blocks
+  - the final semicolon is optional
+  - `/* comments */` anywhere
 
 * **selectors**: type (`div`), universal (`*`), `.class`, `#id`,
   compounds (`div.note#top.wide`), descendant combinator
@@ -50,15 +52,14 @@ static_assert(!ctcss::is_valid<"p { color red }">);             // typos fail th
   text exactly (font stacks, `url(...)`, shorthand lists all pass
   through), `!important` is peeled off and flagged
 
-* **matching**: `ctcss::matches(selector, chain)` against
-  `element_ref` chains (tag/id/space-separated classes — exactly what
-  an HTML element knows); tags compare case-insensitively, classes
-  and ids exactly; descendant matching backtracks correctly
+* **matching**:
+  - `ctcss::matches(selector, chain)` against `element_ref` chains (tag/id/space-separated classes — exactly what an HTML element knows)
+  - tags compare case-insensitively, classes and ids exactly
+  - descendant matching backtracks correctly
 
-* **the cascade**: `ctcss::query(sheet, chain, "property")` resolves
-  `!important` → specificity (ids, classes, types) → source order,
-  like a browser; `entries(sheet)` exposes the flattened
-  (selector × declaration) view the cascade runs on
+* **the cascade**:
+  - `ctcss::query(sheet, chain, "property")` resolves `!important` → specificity (ids, classes, types) → source order, like a browser
+  - `entries(sheet)` exposes the flattened (selector × declaration) view the cascade runs on
 
 * **typed values**: `parse_length` (`px em rem % vw vh`, unitless
   zero) and `parse_color` (`#rgb #rgba #rrggbb #rrggbbaa`,
