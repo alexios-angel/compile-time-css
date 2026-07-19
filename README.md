@@ -40,25 +40,31 @@ static_assert(!ctcss::is_valid<"p { color red }">);             // typos fail th
 
 * **rules**: selector lists (`h1, .title { ... }`) with declaration
   blocks; the final semicolon is optional; `/* comments */` anywhere
+
 * **selectors**: type (`div`), universal (`*`), `.class`, `#id`,
   compounds (`div.note#top.wide`), descendant combinator
   (whitespace), child combinator (`>`) — in any combination
+
 * **declarations**: any `property: value` pair — property names fold
   to lowercase (they match case-insensitively), values keep their raw
   text exactly (font stacks, `url(...)`, shorthand lists all pass
   through), `!important` is peeled off and flagged
+
 * **matching**: `ctcss::matches(selector, chain)` against
   `element_ref` chains (tag/id/space-separated classes — exactly what
   an HTML element knows); tags compare case-insensitively, classes
   and ids exactly; descendant matching backtracks correctly
+
 * **the cascade**: `ctcss::query(sheet, chain, "property")` resolves
   `!important` → specificity (ids, classes, types) → source order,
   like a browser; `entries(sheet)` exposes the flattened
   (selector × declaration) view the cascade runs on
+
 * **typed values**: `parse_length` (`px em rem % vw vh`, unitless
   zero) and `parse_color` (`#rgb #rgba #rrggbb #rrggbbaa`,
   `rgb()/rgba()`, the classic named colors, `transparent`) — all
   `constexpr`, ready for a layout engine
+
 * **serialization**: `ctcss::serialize(sheet)` renders minified CSS
   into static storage
 
