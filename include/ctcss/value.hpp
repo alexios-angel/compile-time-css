@@ -52,12 +52,58 @@ struct value_sheet {
 		bool important = false;
 	};
 
+	// a plain declaration (used by @font-face and @keyframes bodies)
+	struct declaration {
+		std::string property;
+		std::string value;
+	};
+	// @font-face { font-family: X; src: url(...); ... }
+	struct font_face {
+		std::vector<declaration> decls;
+		// the value of `prop` in this @font-face ("" if absent), unquoted
+		constexpr std::string_view get(std::string_view prop) const noexcept {
+			for (const declaration & d : decls) {
+				if (d.property.size() == prop.size()) {
+					bool eq = true;
+					for (std::size_t i = 0; i < prop.size(); ++i) {
+						char a = d.property[i], b = prop[i];
+						if (a >= 'A' && a <= 'Z') { a = static_cast<char>(a - 'A' + 'a'); }
+						if (b >= 'A' && b <= 'Z') { b = static_cast<char>(b - 'A' + 'a'); }
+						if (a != b) { eq = false; break; }
+					}
+					if (eq) { return d.value; }
+				}
+			}
+			return {};
+		}
+	};
+	// one keyframe stop: its position (0..1) and the declarations that apply there
+	struct keyframe {
+		double at = 0; // 0..1
+		std::vector<declaration> decls;
+	};
+	// @keyframes NAME { 0% {...} 100% {...} }
+	struct keyframes_rule {
+		std::string name;
+		std::vector<keyframe> frames;
+	};
+
 	std::vector<selector> selectors;
 	std::vector<entry> entries;
+	std::vector<font_face> font_faces;
+	std::vector<keyframes_rule> keyframes;
 	std::size_t rules = 0;
 
 	constexpr std::size_t rule_count() const noexcept { return rules; }
 	constexpr std::size_t entry_count() const noexcept { return entries.size(); }
+
+	// find a @keyframes animation by name (nullptr if none)
+	constexpr const keyframes_rule * animation(std::string_view name) const noexcept {
+		for (const keyframes_rule & k : keyframes) {
+			if (std::string_view{k.name} == name) { return &k; }
+		}
+		return nullptr;
+	}
 };
 
 namespace detail {
@@ -161,6 +207,57 @@ constexpr value_sheet::selector v_parse_selector(std::string_view sel) {
 	return out;
 }
 
+// strip one layer of matching surrounding quotes (font-family "X", url('...'))
+constexpr std::string_view unquote(std::string_view s) noexcept {
+	if (s.size() >= 2 && (s.front() == '"' || s.front() == '\'') && s.back() == s.front()) {
+		return s.substr(1, s.size() - 2);
+	}
+	return s;
+}
+
+// parse a leading (optionally signed, optionally fractional) number; trailing
+// units (%, px, ...) are ignored. 0 if none.
+constexpr double v_num(std::string_view s) noexcept {
+	std::size_t i = 0;
+	bool neg = false;
+	if (i < s.size() && (s[i] == '+' || s[i] == '-')) { neg = s[i] == '-'; ++i; }
+	double v = 0;
+	while (i < s.size() && s[i] >= '0' && s[i] <= '9') { v = v * 10 + (s[i] - '0'); ++i; }
+	if (i < s.size() && s[i] == '.') {
+		++i;
+		double f = 0.1;
+		while (i < s.size() && s[i] >= '0' && s[i] <= '9') { v += (s[i] - '0') * f; f *= 0.1; ++i; }
+	}
+	return neg ? -v : v;
+}
+
+// split a declaration body ("a: 1; b: 2") into declarations (property/value),
+// trimming and peeling a trailing !important. Shared by rules, @font-face and
+// @keyframes stops.
+constexpr std::vector<value_sheet::declaration> v_parse_decls(std::string_view body) {
+	std::vector<value_sheet::declaration> out;
+	std::size_t ds = 0;
+	for (std::size_t k = 0; k <= body.size(); ++k) {
+		if (k == body.size() || body[k] == ';') {
+			const std::string_view dt = v_trim(body.substr(ds, k - ds));
+			ds = k + 1;
+			if (dt.empty()) { continue; }
+			const std::size_t colon = dt.find(':');
+			if (colon == std::string_view::npos) { continue; }
+			const std::string_view prop = v_trim(dt.substr(0, colon));
+			std::string_view val = v_trim(dt.substr(colon + 1));
+			const std::size_t bang = val.rfind('!');
+			if (bang != std::string_view::npos &&
+			    ascii_iequals(v_trim(val.substr(bang + 1)), std::string_view{"important"})) {
+				val = v_trim(val.substr(0, bang));
+			}
+			if (prop.empty() || val.empty()) { continue; }
+			out.push_back({v_str(prop), v_str(val)});
+		}
+	}
+	return out;
+}
+
 struct css_parser {
 	std::string_view s;
 	std::size_t i = 0;
@@ -190,22 +287,98 @@ struct css_parser {
 				continue; // stray close at top level
 			}
 			if (s[i] == '@') {
-				skip_at_rule();
+				at_rule();
 				continue;
 			}
 			parse_rule();
 		}
 	}
-	// @media/@supports blocks recurse (condition ignored); @import/@charset
-	// end at ';'; @font-face/@keyframes bodies fall through parse_rule and
-	// are dropped (their inner text has no rule braces to latch onto).
-	constexpr void skip_at_rule() {
-		while (i < s.size() && s[i] != ';' && s[i] != '{' && s[i] != '}') { ++i; }
-		if (i < s.size() && s[i] == ';') { ++i; return; }
-		if (i < s.size() && s[i] == '{') {
+	// skip a balanced { ... } block; enter at the char AFTER the '{'
+	constexpr void skip_block() {
+		int depth = 1;
+		while (i < s.size() && depth > 0) {
+			if (s[i] == '{') { ++depth; }
+			else if (s[i] == '}') { --depth; }
 			++i;
-			parse_rules(true);
 		}
+	}
+	// @font-face + @keyframes are CAPTURED; @media/@supports/@document/@layer
+	// recurse (condition ignored - fine for screen); @import/@charset/@namespace
+	// end at ';'; anything else (@page, ...) is a skipped balanced block.
+	constexpr void at_rule() {
+		++i; // past '@'
+		const std::size_t ns = i;
+		while (i < s.size() && (s[i] == '-' || (s[i] >= 'a' && s[i] <= 'z') ||
+		                        (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9'))) { ++i; }
+		std::string_view name = s.substr(ns, i - ns);
+		// strip a vendor prefix (-webkit-keyframes -> keyframes)
+		for (const std::string_view p : {std::string_view{"-webkit-"}, std::string_view{"-moz-"},
+		                                 std::string_view{"-o-"}, std::string_view{"-ms-"}}) {
+			if (name.size() > p.size() && name.substr(0, p.size()) == p) {
+				name = name.substr(p.size());
+				break;
+			}
+		}
+		const std::size_t ps = i;
+		while (i < s.size() && s[i] != '{' && s[i] != ';' && s[i] != '}') { ++i; }
+		const std::string_view prelude = v_trim(s.substr(ps, i - ps));
+		if (i >= s.size() || s[i] == '}') { return; }
+		if (s[i] == ';') { ++i; return; } // @import / @charset / @namespace
+		++i;                              // past '{'
+		if (ascii_iequals(name, std::string_view{"font-face"})) {
+			const std::size_t bstart = i;
+			while (i < s.size() && s[i] != '}') { ++i; }
+			value_sheet::font_face ff;
+			ff.decls = v_parse_decls(s.substr(bstart, i - bstart));
+			if (i < s.size()) { ++i; }
+			if (!ff.decls.empty()) { out.font_faces.push_back(std::move(ff)); }
+		} else if (ascii_iequals(name, std::string_view{"keyframes"})) {
+			parse_keyframes(unquote(prelude));
+		} else if (ascii_iequals(name, std::string_view{"media"}) ||
+		           ascii_iequals(name, std::string_view{"supports"}) ||
+		           ascii_iequals(name, std::string_view{"document"}) ||
+		           ascii_iequals(name, std::string_view{"layer"})) {
+			parse_rules(true);
+		} else {
+			skip_block(); // @page / @counter-style / ... - not modeled
+		}
+	}
+	// parse a @keyframes body: each `<stop-list> { decls }` where a stop is a
+	// percentage or from/to; one keyframe per stop (all sharing the decls).
+	constexpr void parse_keyframes(std::string_view name) {
+		value_sheet::keyframes_rule kf;
+		kf.name = v_str(name);
+		for (;;) {
+			skip_ws();
+			if (i >= s.size()) { break; }
+			if (s[i] == '}') { ++i; break; } // end of the @keyframes block
+			const std::size_t ss = i;
+			while (i < s.size() && s[i] != '{' && s[i] != '}') { ++i; }
+			if (i >= s.size() || s[i] == '}') {
+				if (i < s.size()) { ++i; }
+				break;
+			}
+			const std::string_view stops = s.substr(ss, i - ss);
+			++i; // past '{'
+			const std::size_t bstart = i;
+			while (i < s.size() && s[i] != '}') { ++i; }
+			const std::vector<value_sheet::declaration> decls = v_parse_decls(s.substr(bstart, i - bstart));
+			if (i < s.size()) { ++i; }
+			std::size_t start = 0;
+			for (std::size_t k = 0; k <= stops.size(); ++k) {
+				if (k == stops.size() || stops[k] == ',') {
+					const std::string_view one = v_trim(stops.substr(start, k - start));
+					start = k + 1;
+					if (one.empty()) { continue; }
+					double at = 0;
+					if (ascii_iequals(one, std::string_view{"from"})) { at = 0.0; }
+					else if (ascii_iequals(one, std::string_view{"to"})) { at = 1.0; }
+					else { at = v_num(one) / 100.0; }
+					kf.frames.push_back(value_sheet::keyframe{at, decls});
+				}
+			}
+		}
+		if (!kf.name.empty() && !kf.frames.empty()) { out.keyframes.push_back(std::move(kf)); }
 	}
 	constexpr void parse_rule() {
 		const std::size_t start = i;

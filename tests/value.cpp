@@ -126,6 +126,39 @@ int main() {
 		return ctcss::query(s, c, 1, "color") == "blue"sv && s.rule_count() == 3;
 	}(), "value CSS parses+queries at compile time (transient constexpr)");
 
+	// --- @font-face is CAPTURED (not skipped), and rules after it still parse
+	{
+		const auto s = ctcss::parse_value(
+		    "@font-face { font-family: 'Press Start 2P'; src: url(/f/ps.ttf) format('truetype') }"
+		    " p { color: red }");
+		if (s.font_faces.size() != 1) { std::printf("FAIL font_faces %zu\n", s.font_faces.size()); ++failures; }
+		else {
+			eq("font-face family", s.font_faces[0].get("font-family"), "'Press Start 2P'");
+			eq("font-face src", s.font_faces[0].get("src"), "url(/f/ps.ttf) format('truetype')");
+		}
+		element_ref chain[] = {{"p"}};
+		eq("rule-after-font-face", ctcss::query(s, chain, 1, "color"), "red");
+	}
+	// --- @keyframes is CAPTURED with its stops (from/to/% + comma lists)
+	{
+		const auto s = ctcss::parse_value(
+		    "@keyframes spin { from { opacity: 0; transform: rotate(0deg) }"
+		    " 50%, 75% { opacity: 0.5 } to { opacity: 1; transform: rotate(360deg) } }");
+		const auto * k = s.animation("spin");
+		if (k == nullptr) { std::printf("FAIL keyframes not found\n"); ++failures; }
+		else if (k->frames.size() != 4) { std::printf("FAIL keyframes stops %zu\n", k->frames.size()); ++failures; }
+		else {
+			// from -> 0.0, to -> 1.0
+			if (k->frames.front().at != 0.0 || k->frames.back().at != 1.0) {
+				std::printf("FAIL keyframe positions\n"); ++failures;
+			}
+			eq("keyframe decl", k->frames.back().decls.empty() ? "" : k->frames.back().decls[0].property, "opacity");
+		}
+		// -webkit- prefix is stripped
+		const auto s2 = ctcss::parse_value("@-webkit-keyframes fade { to { opacity: 1 } }");
+		if (s2.animation("fade") == nullptr) { std::printf("FAIL vendor keyframes\n"); ++failures; }
+	}
+
 	if (failures == 0) { std::printf("ctcss value suite: all checks passed\n"); }
 	return failures ? 1 : 0;
 }
