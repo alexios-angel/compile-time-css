@@ -19,9 +19,8 @@
 
 namespace ctcss::detail {
 
-constexpr bool is_css_blank(char c) noexcept {
-	return c == ' ' || c == '\x09' || c == '\x0A' || c == '\x0D';
-}
+// is_css_blank now lives in types.hpp (a grammar-free helper the value
+// path shares); bind.hpp gets it via the types.hpp include above.
 
 // --- span lifts
 

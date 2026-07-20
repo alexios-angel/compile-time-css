@@ -47,7 +47,7 @@ $(OBJECTS): %.o: %.cpp $(PCH)
 
 pch: $(PCH)
 
-$(PCH): include/ctcss.hpp
+$(PCH): include/ctcss.hpp $(wildcard include/ctcss/*.hpp)
 	$(CXX) $(CXXFLAGS) -x c++-header $< -o $@
 
 -include $(DEPENDENCY_FILES)

@@ -1,12 +1,23 @@
 #ifndef CTCSS__HPP
 #define CTCSS__HPP
 
+// CTCSS_NO_GRAMMAR: skip the lark/Earley grammar entirely. The grammar (the
+// compile-time table build in grammar.hpp + the binder) is the expensive part
+// of including this header and is ONLY needed by the compile-time TYPE path
+// (parse<>()/is_valid<>). A translation unit that uses only the runtime VALUE
+// path - parse_value()/query()/parse_length()/parse_color() - defines
+// CTCSS_NO_GRAMMAR and pays none of it. (See ctjs/cthtml for the twins.)
 #include "ctlark.hpp"
+#ifndef CTCSS_NO_GRAMMAR
 #include "ctcss/grammar.hpp"
+#endif
 #include "ctcss/types.hpp"
+#ifndef CTCSS_NO_GRAMMAR
 #include "ctcss/bind.hpp"
+#endif
 #include "ctcss/values.hpp"
 #include "ctcss/match.hpp"
+#include "ctcss/value.hpp"
 #include "ctcss/serialize.hpp"
 
 // ctcss: compile-time CSS.
@@ -39,6 +50,11 @@
 // match.hpp supplies element_ref chains, matches() and query().
 
 namespace ctcss {
+
+// Everything below is the compile-time TYPE path (it needs the grammar). The
+// runtime VALUE path - parse_value/query/parse_length/parse_color/element_ref
+// and the stylesheet TYPES - is available either way from the includes above.
+#ifndef CTCSS_NO_GRAMMAR
 
 #if CTLL_CNTTP_COMPILER_CHECK
 #define CTCSS_STRING_INPUT ctll::fixed_string
@@ -101,6 +117,8 @@ ctlark::debug::runtime_result parse_runtime(std::string_view in) {
 }
 
 } // namespace debug
+
+#endif // CTCSS_NO_GRAMMAR
 
 } // namespace ctcss
 
