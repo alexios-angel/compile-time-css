@@ -334,8 +334,14 @@ struct css_parser {
 			if (!ff.decls.empty()) { out.font_faces.push_back(std::move(ff)); }
 		} else if (ascii_iequals(name, std::string_view{"keyframes"})) {
 			parse_keyframes(unquote(prelude));
-		} else if (ascii_iequals(name, std::string_view{"media"}) ||
-		           ascii_iequals(name, std::string_view{"supports"}) ||
+		} else if (ascii_iequals(name, std::string_view{"media"})) {
+			// we render a single landscape, screen-sized viewport: apply the block
+			// unless it is gated on portrait or print (which we are not). Full
+			// viewport-dependent media-query evaluation is not modeled.
+			const bool skip = prelude.find("portrait") != std::string_view::npos ||
+			                  prelude.find("print") != std::string_view::npos;
+			if (skip) { skip_block(); } else { parse_rules(true); }
+		} else if (ascii_iequals(name, std::string_view{"supports"}) ||
 		           ascii_iequals(name, std::string_view{"document"}) ||
 		           ascii_iequals(name, std::string_view{"layer"})) {
 			parse_rules(true);
