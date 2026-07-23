@@ -228,74 +228,13 @@ Software.
 
 #include <cstdint>
 
-#ifndef CTLL__UTILITIES__HPP
-#define CTLL__UTILITIES__HPP
-
-#ifndef CTLL_IN_A_MODULE
-#include <type_traits>
-#endif
-
-#ifdef CTLL_IN_A_MODULE
-#define CTLL_EXPORT export
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
 #else
-#define CTLL_EXPORT 
+#define CTCSS_EXPORT
 #endif
-
-#if defined __cpp_nontype_template_parameter_class
-    #define CTLL_CNTTP_COMPILER_CHECK 1
-#elif defined __cpp_nontype_template_args
-// compiler which defines correctly feature test macro (not you clang)
-    #if __cpp_nontype_template_args >= 201911L
-        #define CTLL_CNTTP_COMPILER_CHECK 1
-    #elif __cpp_nontype_template_args >= 201411L
-// appleclang 13+
-      #if defined __apple_build_version__
-        #if defined __clang_major__ && __clang_major__ >= 13
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #else 
-// clang 12+
-        #if defined __clang_major__ && __clang_major__ >= 12
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #endif
-    #endif
-#endif
-
-#ifndef CTLL_CNTTP_COMPILER_CHECK
-    #define CTLL_CNTTP_COMPILER_CHECK 0
-#endif
-
-#ifdef _MSC_VER
-#define CTLL_FORCE_INLINE __forceinline
-#else
-#define CTLL_FORCE_INLINE __attribute__((always_inline))
-#endif
-
-namespace ctll {
-	
-template <bool> struct conditional_helper;
-	
-template <> struct conditional_helper<true> {
-	template <typename A, typename> using type = A;
-};
-
-template <> struct conditional_helper<false> {
-	template <typename, typename B> using type = B;
-};
-
-template <bool V, typename A, typename B> using conditional = typename conditional_helper<V>::template type<A,B>;
-	
-}
-
-#endif
-
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>
@@ -353,74 +292,13 @@ enum class rel : unsigned char {
 
 #include <cstdint>
 
-#ifndef CTLL__UTILITIES__HPP
-#define CTLL__UTILITIES__HPP
-
-#ifndef CTLL_IN_A_MODULE
-#include <type_traits>
-#endif
-
-#ifdef CTLL_IN_A_MODULE
-#define CTLL_EXPORT export
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
 #else
-#define CTLL_EXPORT 
+#define CTCSS_EXPORT
 #endif
-
-#if defined __cpp_nontype_template_parameter_class
-    #define CTLL_CNTTP_COMPILER_CHECK 1
-#elif defined __cpp_nontype_template_args
-// compiler which defines correctly feature test macro (not you clang)
-    #if __cpp_nontype_template_args >= 201911L
-        #define CTLL_CNTTP_COMPILER_CHECK 1
-    #elif __cpp_nontype_template_args >= 201411L
-// appleclang 13+
-      #if defined __apple_build_version__
-        #if defined __clang_major__ && __clang_major__ >= 13
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #else 
-// clang 12+
-        #if defined __clang_major__ && __clang_major__ >= 12
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #endif
-    #endif
-#endif
-
-#ifndef CTLL_CNTTP_COMPILER_CHECK
-    #define CTLL_CNTTP_COMPILER_CHECK 0
-#endif
-
-#ifdef _MSC_VER
-#define CTLL_FORCE_INLINE __forceinline
-#else
-#define CTLL_FORCE_INLINE __attribute__((always_inline))
-#endif
-
-namespace ctll {
-	
-template <bool> struct conditional_helper;
-	
-template <> struct conditional_helper<true> {
-	template <typename A, typename> using type = A;
-};
-
-template <> struct conditional_helper<false> {
-	template <typename, typename B> using type = B;
-};
-
-template <bool V, typename A, typename B> using conditional = typename conditional_helper<V>::template type<A,B>;
-	
-}
-
-#endif
-
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>
@@ -543,7 +421,7 @@ constexpr std::size_t take_number(std::string_view s, double & out) noexcept {
 } // namespace detail
 
 // "12px", "1.5em", "-2rem", "50%", "0" (unitless zero), "100vh"
-CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 	double v = 0;
 	const std::size_t used = detail::take_number(s, v);
 	if (used == 0) { return {}; }
@@ -560,7 +438,7 @@ CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 
 // #rgb, #rgba, #rrggbb, #rrggbbaa, rgb(r, g, b), rgba(r, g, b, a),
 // and the CSS Level 1 named colors + a few staples + transparent
-CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 	const auto named = [&](std::string_view n, unsigned char r, unsigned char g,
 	                       unsigned char b, unsigned char a = 255) {
 		return detail::ascii_iequals(s, n) ? color{true, r, g, b, a} : color{};
@@ -659,74 +537,13 @@ CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 
 #include <cstdint>
 
-#ifndef CTLL__UTILITIES__HPP
-#define CTLL__UTILITIES__HPP
-
-#ifndef CTLL_IN_A_MODULE
-#include <type_traits>
-#endif
-
-#ifdef CTLL_IN_A_MODULE
-#define CTLL_EXPORT export
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
 #else
-#define CTLL_EXPORT 
+#define CTCSS_EXPORT
 #endif
-
-#if defined __cpp_nontype_template_parameter_class
-    #define CTLL_CNTTP_COMPILER_CHECK 1
-#elif defined __cpp_nontype_template_args
-// compiler which defines correctly feature test macro (not you clang)
-    #if __cpp_nontype_template_args >= 201911L
-        #define CTLL_CNTTP_COMPILER_CHECK 1
-    #elif __cpp_nontype_template_args >= 201411L
-// appleclang 13+
-      #if defined __apple_build_version__
-        #if defined __clang_major__ && __clang_major__ >= 13
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #else 
-// clang 12+
-        #if defined __clang_major__ && __clang_major__ >= 12
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #endif
-    #endif
-#endif
-
-#ifndef CTLL_CNTTP_COMPILER_CHECK
-    #define CTLL_CNTTP_COMPILER_CHECK 0
-#endif
-
-#ifdef _MSC_VER
-#define CTLL_FORCE_INLINE __forceinline
-#else
-#define CTLL_FORCE_INLINE __attribute__((always_inline))
-#endif
-
-namespace ctll {
-	
-template <bool> struct conditional_helper;
-	
-template <> struct conditional_helper<true> {
-	template <typename A, typename> using type = A;
-};
-
-template <> struct conditional_helper<false> {
-	template <typename, typename B> using type = B;
-};
-
-template <bool V, typename A, typename B> using conditional = typename conditional_helper<V>::template type<A,B>;
-	
-}
-
-#endif
-
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>
@@ -849,74 +666,13 @@ constexpr bool has_class(std::string_view classes, std::string_view name) noexce
 
 #include <cstdint>
 
-#ifndef CTLL__UTILITIES__HPP
-#define CTLL__UTILITIES__HPP
-
-#ifndef CTLL_IN_A_MODULE
-#include <type_traits>
-#endif
-
-#ifdef CTLL_IN_A_MODULE
-#define CTLL_EXPORT export
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
 #else
-#define CTLL_EXPORT 
+#define CTCSS_EXPORT
 #endif
-
-#if defined __cpp_nontype_template_parameter_class
-    #define CTLL_CNTTP_COMPILER_CHECK 1
-#elif defined __cpp_nontype_template_args
-// compiler which defines correctly feature test macro (not you clang)
-    #if __cpp_nontype_template_args >= 201911L
-        #define CTLL_CNTTP_COMPILER_CHECK 1
-    #elif __cpp_nontype_template_args >= 201411L
-// appleclang 13+
-      #if defined __apple_build_version__
-        #if defined __clang_major__ && __clang_major__ >= 13
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #else 
-// clang 12+
-        #if defined __clang_major__ && __clang_major__ >= 12
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #endif
-    #endif
-#endif
-
-#ifndef CTLL_CNTTP_COMPILER_CHECK
-    #define CTLL_CNTTP_COMPILER_CHECK 0
-#endif
-
-#ifdef _MSC_VER
-#define CTLL_FORCE_INLINE __forceinline
-#else
-#define CTLL_FORCE_INLINE __attribute__((always_inline))
-#endif
-
-namespace ctll {
-	
-template <bool> struct conditional_helper;
-	
-template <> struct conditional_helper<true> {
-	template <typename A, typename> using type = A;
-};
-
-template <> struct conditional_helper<false> {
-	template <typename, typename B> using type = B;
-};
-
-template <bool V, typename A, typename B> using conditional = typename conditional_helper<V>::template type<A,B>;
-	
-}
-
-#endif
-
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>
@@ -1032,74 +788,13 @@ constexpr bool has_class(std::string_view classes, std::string_view name) noexce
 
 #include <cstdint>
 
-#ifndef CTLL__UTILITIES__HPP
-#define CTLL__UTILITIES__HPP
-
-#ifndef CTLL_IN_A_MODULE
-#include <type_traits>
-#endif
-
-#ifdef CTLL_IN_A_MODULE
-#define CTLL_EXPORT export
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
 #else
-#define CTLL_EXPORT 
+#define CTCSS_EXPORT
 #endif
-
-#if defined __cpp_nontype_template_parameter_class
-    #define CTLL_CNTTP_COMPILER_CHECK 1
-#elif defined __cpp_nontype_template_args
-// compiler which defines correctly feature test macro (not you clang)
-    #if __cpp_nontype_template_args >= 201911L
-        #define CTLL_CNTTP_COMPILER_CHECK 1
-    #elif __cpp_nontype_template_args >= 201411L
-// appleclang 13+
-      #if defined __apple_build_version__
-        #if defined __clang_major__ && __clang_major__ >= 13
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #else 
-// clang 12+
-        #if defined __clang_major__ && __clang_major__ >= 12
-// but only in c++20 and more
-          #if __cplusplus > 201703L
-              #define CTLL_CNTTP_COMPILER_CHECK 1
-          #endif
-        #endif
-      #endif
-    #endif
-#endif
-
-#ifndef CTLL_CNTTP_COMPILER_CHECK
-    #define CTLL_CNTTP_COMPILER_CHECK 0
-#endif
-
-#ifdef _MSC_VER
-#define CTLL_FORCE_INLINE __forceinline
-#else
-#define CTLL_FORCE_INLINE __attribute__((always_inline))
-#endif
-
-namespace ctll {
-	
-template <bool> struct conditional_helper;
-	
-template <> struct conditional_helper<true> {
-	template <typename A, typename> using type = A;
-};
-
-template <> struct conditional_helper<false> {
-	template <typename, typename B> using type = B;
-};
-
-template <bool V, typename A, typename B> using conditional = typename conditional_helper<V>::template type<A,B>;
-	
-}
-
-#endif
-
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>
@@ -1222,7 +917,7 @@ constexpr std::size_t take_number(std::string_view s, double & out) noexcept {
 } // namespace detail
 
 // "12px", "1.5em", "-2rem", "50%", "0" (unitless zero), "100vh"
-CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 	double v = 0;
 	const std::size_t used = detail::take_number(s, v);
 	if (used == 0) { return {}; }
@@ -1239,7 +934,7 @@ CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 
 // #rgb, #rgba, #rrggbb, #rrggbbaa, rgb(r, g, b), rgba(r, g, b, a),
 // and the CSS Level 1 named colors + a few staples + transparent
-CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 	const auto named = [&](std::string_view n, unsigned char r, unsigned char g,
 	                       unsigned char b, unsigned char a = 255) {
 		return detail::ascii_iequals(s, n) ? color{true, r, g, b, a} : color{};
@@ -1334,24 +1029,21 @@ CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 #include <vector>
 #endif
 
-// A stylesheet parsed BY VALUE from a runtime std::string_view - the runtime
-// twin of parse<>()'s compile-time TYPE. ctlark's Earley parse is superlinear
-// (the compile-time wall for big pages, just like ctjs/cthtml); this is a
-// hand-written LINEAR recursive-descent parser producing an OWNING value
-// stylesheet, walked by the same cascade match.hpp uses on the type path.
+// THE stylesheet parser: a hand-written LINEAR recursive-descent value
+// parser over a std::string_view, producing an OWNING value stylesheet
+// walked by the cascade. Being a value function it folds in a
+// static_assert and parses runtime strings with the same call; a large
+// stylesheet costs a translation unit nothing.
 //
-// Two deliberate differences from the type path:
-//   * O(n), no template instantiation - a large stylesheet costs the page's
-//     translation unit nothing (it is parsed at runtime, from a string).
-//   * LENIENT - unsupported constructs (@media/@font-face/@keyframes,
-//     malformed declarations) are skipped, not fatal. @media/@supports blocks
-//     recurse (their condition is ignored, inner rules apply); declaration
-//     at-rules are dropped. So real-world CSS parses instead of failing.
+// LENIENT by design - unsupported constructs (@font-face/@keyframes
+// bodies are captured, malformed declarations dropped) are never
+// fatal. Applying @media blocks flatten in; declaration at-rules are
+// dropped. So real-world CSS parses instead of failing.
 //
-// Supported subset mirrors the grammar: comma selector lists; compound
-// tag/#id/.class with descendant (whitespace) and child (>) combinators;
-// `prop: value [!important]` declarations; C-style comments. The cascade is
-// identical to the type path: !important, then specificity, then order.
+// Supported subset: comma selector lists; compound tag/#id/.class with
+// descendant (whitespace) and child (>) combinators; `prop: value
+// [!important]` declarations; C-style comments. The cascade:
+// !important, then specificity, then source order.
 
 namespace ctcss {
 
@@ -1816,7 +1508,7 @@ constexpr bool v_matches(const value_sheet::selector & sel, const element_ref * 
 } // namespace detail
 
 // parse a stylesheet BY VALUE (linear, lenient); the runtime twin of parse<>()
-CTLL_EXPORT constexpr value_sheet parse_value(std::string_view css) {
+CTCSS_EXPORT constexpr value_sheet parse_value(std::string_view css) {
 	value_sheet out;
 	const std::string cleaned = detail::strip_css_comments(css);
 	detail::css_parser p{cleaned, 0, out, 0};
@@ -1826,7 +1518,7 @@ CTLL_EXPORT constexpr value_sheet parse_value(std::string_view css) {
 
 // resolve one property for one element chain (root-first, self-last) through
 // the cascade: !important, then specificity, then source order. "" if none.
-CTLL_EXPORT constexpr std::string_view query(const value_sheet & sheet, const element_ref * chain,
+CTCSS_EXPORT constexpr std::string_view query(const value_sheet & sheet, const element_ref * chain,
                                              std::size_t n, std::string_view property) noexcept {
 	std::string_view best{};
 	std::int32_t best_spec = -1;
@@ -1853,7 +1545,7 @@ CTLL_EXPORT constexpr std::string_view query(const value_sheet & sheet, const el
 	return best;
 }
 
-CTLL_EXPORT template <std::size_t N>
+CTCSS_EXPORT template <std::size_t N>
 constexpr std::string_view query(const value_sheet & sheet, const element_ref (&chain)[N],
                                  std::string_view property) noexcept {
 	return query(sheet, chain, N, property);

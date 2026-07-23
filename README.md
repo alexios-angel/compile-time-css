@@ -1,7 +1,4 @@
-> **Attribution:** this library is built on the CTLL compile-time LL(1)
-> parser from [CTRE](https://github.com/hanickadot/compile-time-regular-expressions)
-> by Hana Dusíková, via the [notre](https://github.com/alexios-angel/notre)
-> fork, and follows the architecture of its siblings
+> **Attribution:** this library follows the architecture of its siblings
 > [compile-time-html](https://github.com/alexios-angel/compile-time-html),
 > [compile-time-javascript](https://github.com/alexios-angel/compile-time-javascript) and
 > [compile-time-json](https://github.com/alexios-angel/compile-time-json).
@@ -145,5 +142,5 @@ cthtml's elements (tag + id + class attribute), and its runtime-capable
 ## License
 
 Apache License 2.0 with LLVM Exceptions (see [LICENSE](LICENSE)).
-The CTLL parser is Hana Dusíková's work, via notre; see
+The repo's historical CTLL/CTRE lineage is recorded in
 [NOTICE](NOTICE).

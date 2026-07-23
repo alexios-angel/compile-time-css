@@ -79,7 +79,7 @@ constexpr std::size_t take_number(std::string_view s, double & out) noexcept {
 } // namespace detail
 
 // "12px", "1.5em", "-2rem", "50%", "0" (unitless zero), "100vh"
-CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 	double v = 0;
 	const std::size_t used = detail::take_number(s, v);
 	if (used == 0) { return {}; }
@@ -96,7 +96,7 @@ CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 
 // #rgb, #rgba, #rrggbb, #rrggbbaa, rgb(r, g, b), rgba(r, g, b, a),
 // and the CSS Level 1 named colors + a few staples + transparent
-CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
+CTCSS_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 	const auto named = [&](std::string_view n, unsigned char r, unsigned char g,
 	                       unsigned char b, unsigned char a = 255) {
 		return detail::ascii_iequals(s, n) ? color{true, r, g, b, a} : color{};

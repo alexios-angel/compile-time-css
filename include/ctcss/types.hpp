@@ -3,7 +3,13 @@
 
 #include <cstdint>
 
-#include "../ctll/utilities.hpp"
+// module-export seam: ctcss.cppm defines CTCSS_IN_A_MODULE and the
+// public names get `export`; plain includes get nothing
+#ifdef CTCSS_IN_A_MODULE
+#define CTCSS_EXPORT export
+#else
+#define CTCSS_EXPORT
+#endif
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
 #include <string_view>

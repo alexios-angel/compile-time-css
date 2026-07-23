@@ -33,8 +33,8 @@ Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
   classes}` (classes space-separated) + `has_class`.
 - `include/ctcss/types.hpp` — shared helpers (`ascii_lower`,
   `is_css_blank`, `ascii_iequals`) and the `rel` enum.
-- `external/compile-time-lark/` — git SUBMODULE; only
-  `ctll/utilities.hpp` (`CTLL_EXPORT`) is consumed now.
+- No submodules: the tree is self-contained (`CTCSS_EXPORT`, the
+  module-export macro, lives in types.hpp).
 - `tests/value.cpp`, `examples/` (theme, wellformed — value API),
   `single-header/ctcss.hpp` (quom), `ctcss.cppm`.
 
@@ -53,8 +53,7 @@ Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
   cannot escape constant evaluation — parse inside the asserting
   expression or bind to a named local in a constexpr lambda (gcc needs
   the named binding; see examples/theme.cpp).
-- **ctll is a git SUBMODULE**, never edit here; only utilities.hpp is
-  used. Bump = checkout in submodule + commit gitlink.
 - **single-header** — `cmake --build build --target single-header` (needs `quom`).
-- **Attribution** — CTLL is Hana Dusíková's (via notre, from CTRE); CSS
-  semantics follow the W3C specs. Preserve `NOTICE`/`LICENSE`.
+- **Attribution** — CSS semantics follow the W3C specs; the historical
+  CTLL/CTRE lineage is recorded in `NOTICE`. Preserve
+  `NOTICE`/`LICENSE`.

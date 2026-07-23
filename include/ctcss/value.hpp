@@ -13,24 +13,21 @@
 #include <vector>
 #endif
 
-// A stylesheet parsed BY VALUE from a runtime std::string_view - the runtime
-// twin of parse<>()'s compile-time TYPE. ctlark's Earley parse is superlinear
-// (the compile-time wall for big pages, just like ctjs/cthtml); this is a
-// hand-written LINEAR recursive-descent parser producing an OWNING value
-// stylesheet, walked by the same cascade match.hpp uses on the type path.
+// THE stylesheet parser: a hand-written LINEAR recursive-descent value
+// parser over a std::string_view, producing an OWNING value stylesheet
+// walked by the cascade. Being a value function it folds in a
+// static_assert and parses runtime strings with the same call; a large
+// stylesheet costs a translation unit nothing.
 //
-// Two deliberate differences from the type path:
-//   * O(n), no template instantiation - a large stylesheet costs the page's
-//     translation unit nothing (it is parsed at runtime, from a string).
-//   * LENIENT - unsupported constructs (@media/@font-face/@keyframes,
-//     malformed declarations) are skipped, not fatal. @media/@supports blocks
-//     recurse (their condition is ignored, inner rules apply); declaration
-//     at-rules are dropped. So real-world CSS parses instead of failing.
+// LENIENT by design - unsupported constructs (@font-face/@keyframes
+// bodies are captured, malformed declarations dropped) are never
+// fatal. Applying @media blocks flatten in; declaration at-rules are
+// dropped. So real-world CSS parses instead of failing.
 //
-// Supported subset mirrors the grammar: comma selector lists; compound
-// tag/#id/.class with descendant (whitespace) and child (>) combinators;
-// `prop: value [!important]` declarations; C-style comments. The cascade is
-// identical to the type path: !important, then specificity, then order.
+// Supported subset: comma selector lists; compound tag/#id/.class with
+// descendant (whitespace) and child (>) combinators; `prop: value
+// [!important]` declarations; C-style comments. The cascade:
+// !important, then specificity, then source order.
 
 namespace ctcss {
 
@@ -495,7 +492,7 @@ constexpr bool v_matches(const value_sheet::selector & sel, const element_ref * 
 } // namespace detail
 
 // parse a stylesheet BY VALUE (linear, lenient); the runtime twin of parse<>()
-CTLL_EXPORT constexpr value_sheet parse_value(std::string_view css) {
+CTCSS_EXPORT constexpr value_sheet parse_value(std::string_view css) {
 	value_sheet out;
 	const std::string cleaned = detail::strip_css_comments(css);
 	detail::css_parser p{cleaned, 0, out, 0};
@@ -505,7 +502,7 @@ CTLL_EXPORT constexpr value_sheet parse_value(std::string_view css) {
 
 // resolve one property for one element chain (root-first, self-last) through
 // the cascade: !important, then specificity, then source order. "" if none.
-CTLL_EXPORT constexpr std::string_view query(const value_sheet & sheet, const element_ref * chain,
+CTCSS_EXPORT constexpr std::string_view query(const value_sheet & sheet, const element_ref * chain,
                                              std::size_t n, std::string_view property) noexcept {
 	std::string_view best{};
 	std::int32_t best_spec = -1;
@@ -532,7 +529,7 @@ CTLL_EXPORT constexpr std::string_view query(const value_sheet & sheet, const el
 	return best;
 }
 
-CTLL_EXPORT template <std::size_t N>
+CTCSS_EXPORT template <std::size_t N>
 constexpr std::string_view query(const value_sheet & sheet, const element_ref (&chain)[N],
                                  std::string_view property) noexcept {
 	return query(sheet, chain, N, property);

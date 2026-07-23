@@ -15,9 +15,12 @@ repository, reproduced unmodified from upstream).
 
 What is derived
 ---------------
-The CTLL compile-time LL(1) parser (ctll::fixed_string and supporting
-headers, provided by the compile-time-lark submodule) is copied from
-notre, where it descends from Hana Dusikova's CTRE with modifications.
+Historically, the CTLL compile-time LL(1) parser (via the
+compile-time-lark submodule) powered the type-level grammar path; it
+descended from Hana Dusikova's CTRE via notre. As of 2026-07 no CTLL
+code ships in this tree - the constexpr value parser is self-contained
+- but the repository's git history contains CTLL, and this notice
+preserves the lineage.
 This repository began as a clone of its sibling compile-time-html
 (https://github.com/alexios-angel/compile-time-html) - itself a clone
 of compile-time-xml - and keeps that git history; the build and
@@ -27,9 +30,9 @@ grammar, the stylesheet types, the selector-matching and cascade
 layer, the value parsers and the ctcss API are original to this
 repository.
 
-Attribution for the parser architecture and the CTLL engine belongs to
-Hana Dusikova; this file preserves it as required by Section 4(c) of
-the Apache License 2.0.
+Attribution for the historical CTLL engine belongs to Hana Dusikova;
+this file preserves it as required by Section 4(c) of the Apache
+License 2.0 for the versions that shipped it.
 
 The grammar layer is ctlark
 (https://github.com/alexios-angel/compile-time-lark), a git submodule
