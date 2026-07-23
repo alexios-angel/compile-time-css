@@ -30,7 +30,8 @@ Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
   unitless 0), `parse_color` (#rgb[a]/#rrggbb[aa], rgb()/rgba(),
   named, transparent), all constexpr.
 - `include/ctcss/match.hpp` — the browser seam: `element_ref{tag, id,
-  classes}` (classes space-separated) + `has_class`.
+  classes, states}` (classes space-separated; states = `pseudo_state`
+  bits ps_hover/ps_active/ps_focus/ps_checked/ps_disabled) + `has_class`.
 - `include/ctcss/types.hpp` — shared helpers (`ascii_lower`,
   `is_css_blank`, `ascii_iequals`) and the `rel` enum.
 - No submodules: the tree is self-contained (`CTCSS_EXPORT`, the
@@ -47,6 +48,11 @@ Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
   document position of the declaration.
 - Leniency contract: a malformed declaration or rule contributes
   nothing; parsing never fails. Non-applying `@media` blocks skip.
+- Pseudo-classes: :hover/:active/:focus/:checked/:disabled match
+  element_ref::states (class-level specificity, case-insensitive);
+  UNKNOWN pseudos (:visited, ::before, :nth-*) make that selector
+  alternative IMPOSSIBLE (never matches) — browser behavior, never a
+  fallback to the base selector.
 
 ## Gotchas
 - **Constexpr lifetime idioms**: an owned constexpr `value_sheet`

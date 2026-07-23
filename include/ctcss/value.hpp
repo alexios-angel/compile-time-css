@@ -36,6 +36,9 @@ struct value_sheet {
 		std::string tag;
 		std::string id;
 		std::vector<std::string> classes;
+		unsigned states = 0;      // required pseudo_state bits (:hover...)
+		std::int32_t pseudos = 0; // recognized pseudo count (specificity)
+		bool impossible = false;  // unknown pseudo => the rule NEVER matches
 	};
 	struct step {
 		compound comp;
@@ -150,25 +153,48 @@ constexpr std::int32_t v_spec_of(const value_sheet::selector & s) noexcept {
 	std::int32_t out = 0;
 	for (const auto & st : s.steps) {
 		out += (st.comp.id.empty() ? 0 : 10000) +
-		       static_cast<std::int32_t>(st.comp.classes.size()) * 100 +
+		       (static_cast<std::int32_t>(st.comp.classes.size()) + st.comp.pseudos) * 100 +
 		       ((st.comp.tag.empty() || st.comp.tag == std::string_view{"*"}) ? 0 : 1);
 	}
 	return out;
 }
 
-// split "div.note#top" into tag + #id + .classes (empty tag = any)
+// the pseudo-classes the matcher models; anything else (:visited,
+// :nth-child(...), ::before, ...) marks the compound IMPOSSIBLE - the
+// rule parses but can never match, exactly like a real browser's
+// treatment of a selector it must not apply
+constexpr unsigned v_pseudo_bit(std::string_view name) noexcept {
+	if (ascii_iequals(name, std::string_view{"hover"})) { return ps_hover; }
+	if (ascii_iequals(name, std::string_view{"active"})) { return ps_active; }
+	if (ascii_iequals(name, std::string_view{"focus"})) { return ps_focus; }
+	if (ascii_iequals(name, std::string_view{"checked"})) { return ps_checked; }
+	if (ascii_iequals(name, std::string_view{"disabled"})) { return ps_disabled; }
+	return 0u;
+}
+
+// split "a.note#top:hover" into tag + #id + .classes + :pseudo bits
+// (empty tag = any)
 constexpr value_sheet::compound v_split_compound(std::string_view tok) {
 	value_sheet::compound c;
 	std::size_t t = 0;
-	while (t < tok.size() && tok[t] != '.' && tok[t] != '#') { ++t; }
+	while (t < tok.size() && tok[t] != '.' && tok[t] != '#' && tok[t] != ':') { ++t; }
 	c.tag = v_str(tok.substr(0, t));
 	std::size_t p = t;
 	while (p < tok.size()) {
 		const char kind = tok[p++];
 		std::size_t q = p;
-		while (q < tok.size() && tok[q] != '.' && tok[q] != '#') { ++q; }
+		while (q < tok.size() && tok[q] != '.' && tok[q] != '#' && tok[q] != ':') { ++q; }
 		std::string name = v_str(tok.substr(p, q - p));
-		if (!name.empty()) {
+		if (kind == ':') {
+			// an empty name here is the first half of a ::pseudo-element
+			const unsigned bit = name.empty() ? 0u : v_pseudo_bit(name);
+			if (bit != 0u) {
+				c.states |= bit;
+				++c.pseudos;
+			} else {
+				c.impossible = true;
+			}
+		} else if (!name.empty()) {
 			if (kind == '#') {
 				c.id = std::move(name);
 			} else {
@@ -462,6 +488,8 @@ struct css_parser {
 // --- the value matcher (the twin of match.hpp's, over owned data)
 
 constexpr bool v_matches_step(const value_sheet::step & s, const element_ref & e) noexcept {
+	if (s.comp.impossible) { return false; }
+	if ((e.states & s.comp.states) != s.comp.states) { return false; }
 	if (!s.comp.tag.empty() && s.comp.tag != std::string_view{"*"} &&
 	    !ascii_iequals(s.comp.tag, e.tag)) {
 		return false;

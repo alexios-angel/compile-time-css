@@ -159,6 +159,83 @@ int main() {
 		if (s2.animation("fade") == nullptr) { std::printf("FAIL vendor keyframes\n"); ++failures; }
 	}
 
+	// --- pseudo-classes: :hover/:active/:focus/:checked/:disabled match the
+	// element_ref `states` bitmask; anything unknown makes the rule
+	// IMPOSSIBLE (never matches - real browser behavior for e.g. :visited)
+	{
+		element_ref plain[] = {{"a"}};
+		element_ref hov[] = {{"a", "", "", ctcss::ps_hover}};
+		eq("hover-on", q("a:hover { color: red }", hov, 1, "color"), "red");
+		eq("hover-off", q("a:hover { color: red }", plain, 1, "color"), "");
+		eq("hover-case", q("a:HOVER { color: red }", hov, 1, "color"), "red");
+
+		element_ref act[] = {{"button", "", "", ctcss::ps_active}};
+		element_ref foc[] = {{"input", "", "", ctcss::ps_focus}};
+		element_ref chk[] = {{"input", "", "", ctcss::ps_checked}};
+		element_ref dis[] = {{"button", "", "", ctcss::ps_disabled}};
+		eq("active-on", q("button:active { color: red }", act, 1, "color"), "red");
+		eq("focus-on", q("input:focus { color: red }", foc, 1, "color"), "red");
+		eq("checked-on", q("input:checked { color: red }", chk, 1, "color"), "red");
+		eq("disabled-on", q("button:disabled { color: gray }", dis, 1, "color"), "gray");
+		element_ref btn[] = {{"button"}};
+		eq("active-off", q("button:active { color: red }", btn, 1, "color"), "");
+
+		// class AND state required, in either spelling order
+		element_ref both[] = {{"a", "", "btn", ctcss::ps_hover}};
+		element_ref clsonly[] = {{"a", "", "btn"}};
+		eq("class+state", q("a.btn:hover { color: red }", both, 1, "color"), "red");
+		eq("state-order", q("a:hover.btn { color: red }", both, 1, "color"), "red");
+		eq("class-no-state", q("a.btn:hover { color: red }", clsonly, 1, "color"), "");
+
+		// bare :hover matches any hovered element
+		element_ref anyhov[] = {{"div", "", "", ctcss::ps_hover}};
+		eq("bare-hover", q(":hover { color: red }", anyhov, 1, "color"), "red");
+
+		// ancestor hover through the chain (div:hover p)
+		element_ref deep_on[] = {{"div", "", "", ctcss::ps_hover}, {"p"}};
+		element_ref deep_off[] = {{"div"}, {"p"}};
+		eq("ancestor-hover", q("div:hover p { color: red }", deep_on, 2, "color"), "red");
+		eq("ancestor-hover-off", q("div:hover p { color: red }", deep_off, 2, "color"), "");
+
+		// multiple required states
+		element_ref cd[] = {{"input", "", "", ctcss::ps_checked | ctcss::ps_disabled}};
+		element_ref conly[] = {{"input", "", "", ctcss::ps_checked}};
+		eq("multi-state", q("input:checked:disabled { color: gray }", cd, 1, "color"), "gray");
+		eq("multi-state-partial", q("input:checked:disabled { color: gray }", conly, 1, "color"), "");
+	}
+	// --- pseudo specificity: a pseudo-class weighs like a class (100)
+	{
+		element_ref hov[] = {{"a", "", "x", ctcss::ps_hover}};
+		eq("pseudo-beats-type", q("a:hover { color: blue } a { color: red }", hov, 1, "color"), "blue");
+		// tie with a class -> source order
+		eq("pseudo-class-tie", q("a:hover { color: blue } a.x { color: green }", hov, 1, "color"), "green");
+		eq("pseudo-class-tie2", q("a.x { color: green } a:hover { color: blue }", hov, 1, "color"), "blue");
+		// two classes beat one pseudo
+		element_ref xy[] = {{"a", "", "x y", ctcss::ps_hover}};
+		eq("classes-beat-pseudo", q("a:hover { color: blue } a.x.y { color: green }", xy, 1, "color"), "green");
+	}
+	// --- unknown pseudos: the rule exists but NEVER matches (no fallback
+	// to the base selector), and other alternatives in a list still work
+	{
+		element_ref plain[] = {{"a"}};
+		element_ref hov[] = {{"a", "", "", ctcss::ps_hover}};
+		eq("visited-never", q("a:visited { color: purple }", plain, 1, "color"), "");
+		eq("visited-never-hov", q("a:visited { color: purple }", hov, 1, "color"), "");
+		eq("visited-no-shadow", q("a:visited { color: purple } a { color: blue }", plain, 1, "color"), "blue");
+		eq("pseudo-element-never", q("a::before { color: red }", plain, 1, "color"), "");
+		eq("functional-never", q("li:nth-child(2) { color: red }", plain, 1, "color"), "");
+		element_ref b[] = {{"b"}};
+		eq("list-isolation", q("a:visited, b { color: red }", b, 1, "color"), "red");
+	}
+	// the critical pseudo facts also fold in a constant expression
+	static_assert([] {
+		auto s = ctcss::parse_value("a:hover { color: red } a:visited { color: purple }");
+		const element_ref hov[] = {{"a", "", "", ctcss::ps_hover}};
+		const element_ref plain[] = {{"a"}};
+		return ctcss::query(s, hov, 1, "color") == "red"sv &&
+		       ctcss::query(s, plain, 1, "color") == ""sv;
+	}(), "pseudo-classes match states and unknown pseudos never match");
+
 	if (failures == 0) { std::printf("ctcss value suite: all checks passed\n"); }
 	return failures ? 1 : 0;
 }

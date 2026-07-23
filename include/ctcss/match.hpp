@@ -18,10 +18,13 @@
 // a static_assert (style resolution at compile time, for a compile-time
 // DOM) and at runtime (a browser restyling after a script mutation).
 //
-// An element_ref is deliberately tiny - tag, id, and the space-
-// separated class attribute, exactly what an HTML element knows:
+// An element_ref is deliberately tiny - tag, id, the space-separated
+// class attribute, and a UI-state bitmask (hover/active/focus/checked/
+// disabled - what pseudo-class selectors match against). The browser
+// engine fills `states` from live interaction; static chains leave it 0:
 //
 //   ctcss::element_ref{"div", "top", "note wide"}
+//   ctcss::element_ref{"a", "", "", ctcss::ps_hover}   // a hovered link
 //
 // A match chain is root-first, self-last:
 //
@@ -34,11 +37,22 @@
 
 namespace ctcss {
 
-// what a selector is matched against: one element's identity
+// the interaction states a pseudo-class selector can require; unscoped
+// so the bits compose without casts (element_ref::states is `unsigned`)
+enum pseudo_state : unsigned {
+	ps_hover = 1u,    // :hover  - pointer over the element (or a descendant)
+	ps_active = 2u,   // :active - pressed (mouse held)
+	ps_focus = 4u,    // :focus  - the focused control
+	ps_checked = 8u,  // :checked - toggled checkbox/radio, selected option
+	ps_disabled = 16u // :disabled - a disabled form control
+};
+
+// what a selector is matched against: one element's identity + UI state
 struct element_ref {
 	std::string_view tag{};
 	std::string_view id{};
 	std::string_view classes{}; // space-separated, like the class attribute
+	unsigned states{};          // pseudo_state bits; 0 = no interaction state
 };
 
 namespace detail {

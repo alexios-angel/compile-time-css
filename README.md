@@ -49,9 +49,10 @@ static_assert(ctcss::parse_color("#f80").g == 136);
   through), `!important` is peeled off and flagged
 
 * **matching**:
-  - `ctcss::matches(selector, chain)` against `element_ref` chains (tag/id/space-separated classes — exactly what an HTML element knows)
-  - tags compare case-insensitively, classes and ids exactly
+  - `ctcss::query(sheet, chain, prop)` against `element_ref` chains (tag/id/space-separated classes + a UI-state bitmask — exactly what an HTML element knows)
+  - tags and pseudo-class names compare case-insensitively, classes and ids exactly
   - descendant matching backtracks correctly
+  - pseudo-classes `:hover` `:active` `:focus` `:checked` `:disabled` match against `element_ref::states` (`ctcss::ps_hover | ...`); each weighs like a class in specificity. An UNKNOWN pseudo (`:visited`, `:nth-child(...)`, `::before`) makes that selector alternative never match — real browser behavior, not a fallback
 
 * **the cascade**:
   - `ctcss::query(sheet, chain, "property")` resolves `!important` → specificity (ids, classes, types) → source order, like a browser
@@ -65,8 +66,8 @@ static_assert(ctcss::parse_color("#f80").g == 136);
 * **serialization**: `ctcss::serialize(sheet)` renders minified CSS
   into static storage
 
-Not in v0.1 (all compile errors, documented): at-rules (`@media`,
-`@import`, `@font-face`), pseudo-classes/elements (`:hover`,
+Not modeled (parse leniently, never match or are skipped): unknown
+pseudo-classes and all pseudo-elements (`:visited`, `:nth-child(...)`,
 `::before`), attribute selectors (`[href]`), sibling combinators
 (`+`, `~`), CSS variables/`calc()` resolution, and semicolons/braces
 inside quoted values.
@@ -85,8 +86,10 @@ constexpr std::string_view ctcss::query(const value_sheet &,
     const element_ref * chain, std::size_t n, std::string_view property);
 // (an element_ref[N] array overload deduces n)
 
-// the browser seam - chains are ROOT-FIRST, self-last:
-struct ctcss::element_ref { std::string_view tag, id, classes; };
+// the browser seam - chains are ROOT-FIRST, self-last; `states` is a
+// ctcss::pseudo_state bitmask (ps_hover/ps_active/ps_focus/ps_checked/
+// ps_disabled) the engine fills from live interaction:
+struct ctcss::element_ref { std::string_view tag, id, classes; unsigned states; };
 
 // typed values, on demand:
 ctcss::parse_length("12px");   // px/em/rem/%/vw/vh, unitless 0 -> {ok, value, u}
