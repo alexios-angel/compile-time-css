@@ -1,29 +1,37 @@
-// Validity as a compile-time property: is_valid answers as a bool
-// without failing the build, so shipping broken CSS becomes
-// impossible - the checks below run in the compiler, not in
-// production.
+// The value parser is LENIENT, the way browsers are: a malformed
+// declaration or rule is skipped, everything else still applies. What
+// used to be a compile-time validity bool is now a behavioral
+// property you can prove: the good rules survive, the broken ones
+// contribute nothing.
 //
 // Build: make wellformed
 
 #include <ctcss.hpp>
 #include <iostream>
 
-// what parses
-static_assert(ctcss::is_valid<"p { color: red }">);
-static_assert(ctcss::is_valid<"div.note#top > ul li { margin: 0 4px; }">);
-static_assert(ctcss::is_valid<"h1, h2, .title { font-weight: bold; }">);
-static_assert(ctcss::is_valid<"p { font: 12px/1.4 'Fira Sans', sans-serif; }">);
-static_assert(ctcss::is_valid<"p { color: red !important; }">);
-static_assert(ctcss::is_valid<"/* comments are fine anywhere */ p { /* here too */ }">);
+constexpr ctcss::element_ref p_chain[] = {{"p", "", ""}};
 
-// what does not (each is one typo away from the lines above)
-static_assert(!ctcss::is_valid<"p { color red }">);   // lost the colon
-static_assert(!ctcss::is_valid<"p { color: red;">);   // lost the brace
-static_assert(!ctcss::is_valid<"color: red;">);       // lost the selector
-static_assert(!ctcss::is_valid<"@import url(x.css);">); // at-rules: not in v0.1
+// clean css parses and resolves
+static_assert(ctcss::query(ctcss::parse_value("p { color: red }"), p_chain, "color") == "red");
+static_assert(ctcss::query(ctcss::parse_value("h1, p, .title { font-weight: bold; }"),
+                           p_chain, "font-weight") == "bold");
+static_assert(ctcss::query(ctcss::parse_value("/* comments */ p { /* here too */ color: red }"),
+                           p_chain, "color") == "red");
 
-// and the diagnostic is one query away, at compile time
-static_assert(!ctcss::error_message<"p { color: red;">().empty());
+// browser-style recovery: the broken declaration drops, the good one applies
+static_assert(ctcss::query(ctcss::parse_value("p { color red; margin: 4px }"),
+                           p_chain, "margin") == "4px");
+static_assert(ctcss::query(ctcss::parse_value("p { color red; margin: 4px }"),
+                           p_chain, "color") == "");
+
+// a rule that never closes takes what it can; later text is gone
+static_assert(ctcss::query(ctcss::parse_value("p { color: red;"), p_chain, "color") == "red");
+
+// applying @media flattens in; non-applying blocks are skipped
+static_assert(ctcss::query(ctcss::parse_value("@media screen { p { color: red } }"),
+                           p_chain, "color") == "red");
+static_assert(ctcss::query(ctcss::parse_value("@media print { p { color: red } }"),
+                           p_chain, "color") == "");
 
 int main() {
 	std::cout << "every claim in this file was proven during compilation\n";

@@ -1,57 +1,61 @@
 # CLAUDE.md — compile-time-css (ctcss)
 
-Header-only, compile-time (constexpr) CSS parser AND resolver. A
-stylesheet is a *type*: `ctcss::parse<...>()`, every accessor
-constexpr, malformed CSS a compile error (or `false` from `is_valid`).
-Selector matching and the cascade (`!important` → specificity → source
-order) are VALUE computations over flattened static views, so
-`matches()`/`query()` run in static_asserts against a compile-time DOM
-chain and equally at runtime (a browser restyling after a script
-mutation). Namespace `ctcss`. Work on `main`. Prefer `rg` over `grep`.
+Header-only, constexpr CSS VALUE parser AND resolver. One entry point:
+`ctcss::parse_value(std::string_view) -> ctcss::value_sheet` — folds in
+a `static_assert` and parses runtime strings with the same call.
+Selector matching and the cascade (`!important` > specificity > source
+order) are value loops (`query(sheet, chain, n, prop)`), equally at
+home in constant evaluation and in a restyle after a script mutation.
+LENIENT like a browser: broken declarations drop, the rest applies —
+there is no validity bool. Namespace `ctcss`. C++20+. Work on `main`.
+
+(History: the type-level parser — a ctlark Earley grammar producing the
+stylesheet as a TYPE, with is_valid<>/parse<>/error_message<> — was
+removed 2026-07; the value parser is the only path.)
 
 ## Build & test — "compiling the tests IS the test"
-Tests under `tests/*.cpp` are `static_assert` suites; each compiles to a `.o`.
+`tests/value.cpp` is a `static_assert` suite; compiling it = passing.
 ```bash
-make                                   # C++20 (default), one .o per test
-make CXX=clang++                       # clang
-make CXX=clang++ CXX_STANDARD=17       # C++17 path (variable-form API)
-make clean
+make                # C++20+, seconds (no grammar bake exists anymore)
+make CXX=clang++
 cmake -B build && cmake --build build && ctest --test-dir build
 ```
-Flags are `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — keep every
-change warning-clean. The PCH (`make pch`, automatic) bakes the grammar
-tables once — the CSS grammar is SMALL, so this is quick (unlike ctjs).
+Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
 
 ## Layout
-- `include/ctcss.hpp` — umbrella; public API (`is_valid`, `parse`, `error_info/message`, `debug::*`).
-- `include/ctcss/grammar.hpp` — the CSS subset as a **lark grammar string**. TWO load-bearing tricks: a COMPOUND selector ("div.note#top") is ONE token (whitespace adjacency of compounds IS the descendant combinator — that's how it survives %ignore; ">" is child), and a declaration VALUE is one raw token up to `;`/`}`.
-- `include/ctcss/bind.hpp` — lowers the tree: splits COMPOUND text into typed tag/#id/.classes (tags fold to lowercase; a later #id wins), trims values, peels `!important` (also "! important", any case).
-- `include/ctcss/types.hpp` — `text`, `compound`, `sel_step<C, rel>` (rel = how the step attaches to the one on its LEFT), `selector` (packed specificity = ids*10000 + classes*100 + types), `declaration`, `rule` (with case-insensitive `property<"key">()`), `stylesheet`, `for_each_rule`.
-- `include/ctcss/match.hpp` — the browser seam: `element_ref{tag,id,classes}` (classes space-separated), per-selector/per-sheet STATIC VIEWS (`selector_data`, `sheet_data`: one `decl_entry` per selector × declaration), `matches()` (right-to-left with descendant backtracking), `query()` (the cascade), `entries()`.
-- `include/ctcss/values.hpp` — `parse_length` (px/em/rem/%/vw/vh, unitless 0), `parse_color` (#rgb[a]/#rrggbb[aa], rgb()/rgba() with clamping, named colors, transparent), all constexpr.
-- `include/ctcss/serialize.hpp` — minified CSS from the sheet type.
-- `external/compile-time-lark/` — git SUBMODULE (ctlark + ctll). Never edit here.
-- `tests/` (`document.cpp` — a real sheet end-to-end, `css.cpp` — the feature matrix, `cxx17.cpp`), `examples/` (`theme`, `wellformed`).
+- `include/ctcss.hpp` — umbrella (types, values, match, value).
+- `include/ctcss/value.hpp` — THE parser + resolver: `parse_value`,
+  `value_sheet` (incl. lenient `@media` flattening, `@keyframes` /
+  `@font-face` capture, `animation()`), `query`, the value matchers.
+- `include/ctcss/values.hpp` — `parse_length` (px/em/rem/%/vw/vh,
+  unitless 0), `parse_color` (#rgb[a]/#rrggbb[aa], rgb()/rgba(),
+  named, transparent), all constexpr.
+- `include/ctcss/match.hpp` — the browser seam: `element_ref{tag, id,
+  classes}` (classes space-separated) + `has_class`.
+- `include/ctcss/types.hpp` — shared helpers (`ascii_lower`,
+  `is_css_blank`, `ascii_iequals`) and the `rel` enum.
+- `external/compile-time-lark/` — git SUBMODULE; only
+  `ctll/utilities.hpp` (`CTLL_EXPORT`) is consumed now.
+- `tests/value.cpp`, `examples/` (theme, wellformed — value API),
+  `single-header/ctcss.hpp` (quom), `ctcss.cppm`.
 
 ## Semantics decisions (keep consistent; README documents all)
-- Chains are ROOT-FIRST, self-last. Tags match case-insensitively
-  (bind folds selector tags to lowercase; cthtml tags are lowercase);
+- Chains are ROOT-FIRST, self-last. Tags match case-insensitively;
   classes/ids exact. The same element cannot satisfy two steps.
-- v0.1 rejects (compile errors): at-rules, pseudo-classes/elements,
-  attribute selectors, `+`/`~` combinators; `;`/`}` cannot appear
-  inside quoted values (the VALUE token stops there).
-- Values stay RAW text; typed parsing (`parse_length`/`parse_color`)
-  happens on demand. Property names fold to lowercase, lookups fold too.
+- Values stay RAW text; typed parsing on demand. Property names fold
+  to lowercase, lookups fold too.
 - Cascade in `query`: important > specificity > source order; order =
-  document position of the declaration (selector-list twins share it).
+  document position of the declaration.
+- Leniency contract: a malformed declaration or rule contributes
+  nothing; parsing never fails. Non-applying `@media` blocks skip.
 
-## GOTCHAS
-- **ctlark and ctll are a git SUBMODULE**: `git submodule update
-  --init` once; bump = checkout in submodule + commit gitlink; build
-  adds `<sub>/include` + `/ctlark` + `/ctll` to -I (quoted-include
-  fallback). CMake install flattens to include/{ctcss,ctlark,ctll}.
-- **single-header** — `make single-header` (needs `quom`); prepends LICENSE.
-- **Attribution** — CTLL is Hana Dusíková's (via `notre`, from CTRE);
-  the Lark grammar language is the lark-parser project's; CSS
-  semantics follow the W3C specs. Preserve `NOTICE` and `LICENSE`
-  (Apache-2.0 w/ LLVM Exceptions).
+## Gotchas
+- **Constexpr lifetime idioms**: an owned constexpr `value_sheet`
+  cannot escape constant evaluation — parse inside the asserting
+  expression or bind to a named local in a constexpr lambda (gcc needs
+  the named binding; see examples/theme.cpp).
+- **ctll is a git SUBMODULE**, never edit here; only utilities.hpp is
+  used. Bump = checkout in submodule + commit gitlink.
+- **single-header** — `make single-header` (needs `quom`).
+- **Attribution** — CTLL is Hana Dusíková's (via notre, from CTRE); CSS
+  semantics follow the W3C specs. Preserve `NOTICE`/`LICENSE`.

@@ -9,31 +9,30 @@
 
 # ctcss — compile-time CSS
 
-CSS parsed while your code compiles — and *resolved* there too. The
-stylesheet is a *type*: malformed CSS is a compile error, every
-accessor is `constexpr`, and selector matching plus the full cascade
-(`!important`, specificity, source order) are plain `constexpr`
-computations over element chains. Style a compile-time DOM in a
-`static_assert`; run the very same `query()` at runtime when a script
-has just flipped a class.
+CSS parsed while your code compiles — and *resolved* there too.
+`ctcss::parse_value(std::string_view)` is a constexpr *value* parser:
+resolve the cascade (`!important`, specificity, source order) inside a
+`static_assert`, or load a runtime stylesheet with the very same call —
+which is what a browser needs the moment a script flips a class.
+Malformed CSS is handled the way browsers handle it: the broken
+declaration drops, everything else still applies.
 
 ```c++
 #include <ctcss.hpp>
 
-constexpr auto theme = ctcss::parse<R"(
+inline constexpr std::string_view theme = R"(
     p          { color: black; margin: 8px; }
     div.note p { color: red !important; }
     #main > ul { width: 640px; }
-)">();
+)";
 
 // the element chain body > div.note > p, root-first
 constexpr ctcss::element_ref chain[] = {{"body"}, {"div", "", "note wide"}, {"p"}};
 
-static_assert(ctcss::query(theme, chain, "color") == "red");    // cascade, resolved
-static_assert(ctcss::query(theme, chain, "margin") == "8px");
+static_assert(ctcss::query(ctcss::parse_value(theme), chain, "color") == "red");  // cascade, resolved
+static_assert(ctcss::query(ctcss::parse_value(theme), chain, "margin") == "8px");
 static_assert(ctcss::parse_length("8px").value == 8);           // typed values
 static_assert(ctcss::parse_color("#f80").g == 136);
-static_assert(!ctcss::is_valid<"p { color red }">);             // typos fail the build
 ```
 
 ## What is supported (v0.1)
@@ -78,140 +77,56 @@ inside quoted values.
 ## API
 
 ```c++
-// syntax as a static property (never a compile error):
-template <ctll::fixed_string Src> constexpr bool ctcss::is_valid;
-ctcss::error_info<Src>();     // kind, byte offset, line, column
-ctcss::error_message<Src>();  // rendered caret diagnostic
+// THE parser - constexpr, lenient, never fails the build:
+constexpr ctcss::value_sheet ctcss::parse_value(std::string_view css);
+sheet.rule_count();
+sheet.animation("name");            // @keyframes lookup
+// @media blocks that apply flatten in; @font-face is captured
 
-// the parsed sheet (a type); invalid CSS fails the build:
-constexpr auto sheet = ctcss::parse<Src>();
-sheet.rule_count();  sheet.rule_at<I>();
-rule.selector_count();  rule.selector_at<I>();  rule.decl_count();  rule.decl<I>();
-rule.property<"color">();          // raw value within this rule ("" if absent)
-decl.property();  decl.value();  decl.important();
-selector.specificity();            // ids*10000 + classes*100 + types
-selector.step<I>();                // compound + how it attaches (descendant/child)
+// resolution - match + specificity + !important + source order:
+constexpr std::string_view ctcss::query(const value_sheet &,
+    const element_ref * chain, std::size_t n, std::string_view property);
+// (an element_ref[N] array overload deduces n)
 
-// matching and the cascade (equally valid in static_assert and at runtime):
-ctcss::element_ref{tag, id, classes};              // classes space-separated
-ctcss::matches(selector, chain);                   // chain root-first, self-last
-ctcss::query(sheet, chain, "property");            // cascade-resolved value ("" if none)
-ctcss::entries(sheet), ctcss::entry_count(sheet);  // the flattened cascade input
+// the browser seam - chains are ROOT-FIRST, self-last:
+struct ctcss::element_ref { std::string_view tag, id, classes; };
 
-// typed values:
-ctcss::parse_length("12px")   // -> {ok, value, unit}
-ctcss::parse_color("#ff8800") // -> {ok, r, g, b, a}
-
-// back to text:
-ctcss::serialize(sheet);   // minified, static storage
+// typed values, on demand:
+ctcss::parse_length("12px");   // px/em/rem/%/vw/vh, unitless 0 -> {ok, value, u}
+ctcss::parse_color("#f80");    // #rgb[a]/#rrggbb[aa], rgb()/rgba(), named -> {ok, r,g,b,a}
 ```
 
-`ctcss::for_each_rule(sheet, f)` iterates rules with their own types.
-`ctcss::debug` bundles the [ctlark debugging
-toolbox](../compile-time-lark#debugging) with the CSS grammar baked
-in: `traced_parse<Src>()`, `parse_runtime(text)`,
-`dump_tokens<Src>()`, `dump_grammar()`.
-
-## C++17
-
-With a pre-C++20 compiler, inputs and keys are `constexpr
-ctll::fixed_string` variables with linkage instead of string literals;
-matching and query are ordinary value calls and need nothing special:
-
-```c++
-static constexpr auto src = ctll::fixed_string{"p { color: red; }"};
-constexpr auto sheet = ctcss::parse<src>();
-constexpr ctcss::element_ref chain[] = {{"p"}};
-static_assert(ctcss::query(sheet, chain, "color") == std::string_view{"red"});
-```
+Constant evaluation note: an owned constexpr `value_sheet` cannot
+outlive constant evaluation — parse inside the asserting expression, or
+bind to a local in a constexpr lambda and return scalar facts.
 
 ## How it works
 
-The grammar layer is
-[ctlark](https://github.com/alexios-angel/compile-time-lark)
-(compile-time Lark). Two tricks make CSS tractable
-([`grammar.hpp`](include/ctcss/grammar.hpp)): a **compound selector is
-a single token** — CSS's descendant combinator is *whitespace*, which
-an `%ignore`-whitespace lexer would destroy, but with `div.note#top`
-as one token, adjacency of compound tokens IS the descendant
-combinator and `>` the child combinator — and a **declaration value is
-a single raw token** up to the `;` or `}`, cooked later. The binder
-([`bind.hpp`](include/ctcss/bind.hpp)) splits compounds into typed
-tag/#id/.classes parts and peels `!important`.
+A hand-written recursive-descent tokenizer/parser builds an owned
+`std::vector` sheet in `constexpr` (`value.hpp`), then matching runs
+right-to-left with descendant backtracking and the cascade picks
+`!important` > specificity (ids, classes, types) > source order — all
+ordinary value loops, equally at home in a `static_assert` and in a
+restyle after a script mutation. `parse_length`/`parse_color`
+(`values.hpp`) cook raw declaration text into numbers on demand.
 
-Matching ([`match.hpp`](include/ctcss/match.hpp)) deliberately leaves
-the type level: every selector and stylesheet materializes a flat
-static VIEW (step tables; one `decl_entry` per selector ×
-declaration), and `matches()`/`query()` are plain `constexpr` loops
-over those views and an `element_ref` chain. That one design choice is
-what lets the same code style a compile-time DOM inside a
-`static_assert` and restyle a live one at runtime — the seam
-[compile-time-browser](#roadmap) needs, since scripts mutate classes
-at runtime.
-
-Because the grammar work happens in headers, a **precompiled header**
-makes it a one-time cost (`make pch`, automatic — the CSS grammar is
-small, so this is quick), and an Earley parse needs a raised constexpr
-budget, carried by the Makefile and the CMake interface
-(`CTCSS_CONSTEXPR_LIMITS`):
-
-```
-clang:  -fconstexpr-steps=500000000 -fconstexpr-depth=1024 -fbracket-depth=2048
-gcc:    -fconstexpr-ops-limit=3000000000 -fconstexpr-loop-limit=10000000 -fconstexpr-depth=1024
-```
-
-ctlark and ctll come in as a git submodule
-(`external/compile-time-lark` — clone with `--recurse-submodules` or
-run `git submodule update --init`); never edit under `external/`. The
-build adds the submodule's include directories so the headers'
-relative `"../ctlark.hpp"`-style includes resolve, and the CMake
-install flattens everything back to `include/{ctcss,ctlark,ctll}`.
+(The original implementation encoded stylesheets as C++ *types* via a
+compile-time Earley grammar; it was retired in 2026-07 for the single
+value parser — one code path, browser-lenient, seconds to compile.)
 
 ## Building and integrating
 
-Header-only. Pick whichever fits your project:
-
-**CMake, as a subdirectory or via FetchContent:**
-
-```cmake
-add_subdirectory(compile-time-css)   # or FetchContent_MakeAvailable(ctcss)
-target_link_libraries(your-target PRIVATE ctcss::ctcss)
-```
-
-**CMake, installed** (`cmake -B build && cmake --install build`):
-
-```cmake
-find_package(ctcss 0.1 REQUIRED)
-target_link_libraries(your-target PRIVATE ctcss::ctcss)
-```
-
-The install also ships a `pkg-config` file (`ctcss.pc`). Tests and
-examples build only when ctcss is the top-level project
-(`CTCSS_BUILD_TESTS`, `CTCSS_BUILD_EXAMPLES`); `CTCSS_CXX_STANDARD`
-selects the advertised standard (default 20). CPack can produce
-TGZ/ZIP archives (plus DEB/RPM where the tooling exists), and
-`-DCTCSS_MODULE=ON` builds `ctcss.cppm` as a named C++ module
-(experimental).
-
-**No build system:** add `include/` plus the submodule's
-`external/compile-time-lark/include` (and its `ctlark`/`ctll`
-subdirectories) to your include path, or copy the amalgamated
-[`single-header/ctcss.hpp`](single-header/ctcss.hpp)
-(regenerate with `make single-header`, which needs the
-[quom](https://pypi.org/project/quom/) tool).
-
-Requires C++17 (C++20 for the string-literal API). Runnable demos live
-in [`examples/`](examples/).
-
-Run the tests (compilation is the test — the suite is `static_assert`s):
+Header-only; C++20 or later (constexpr `std::vector`/`std::string`).
 
 ```bash
-git submodule update --init            # ctlark + ctll (once, after cloning)
-make CXX=clang++                       # C++20
-make CXX=clang++ CXX_STANDARD=17
-# or through CMake/CTest:
+make                 # compiles the static_assert test suite
+make CXX=clang++
 cmake -B build && cmake --build build && ctest --test-dir build
 ```
+
+Vendor `include/` (plus `include/ctll/utilities.hpp` from the
+compile-time-lark submodule — the `CTLL_EXPORT` macro), or use the
+amalgamated `single-header/ctcss.hpp`.
 
 ## Roadmap
 

@@ -69,11 +69,9 @@ endif()
 
 set(CTCSS_HEADERS
 	include/ctcss.hpp
-	include/ctcss/bind.hpp
-	include/ctcss/grammar.hpp
 	include/ctcss/match.hpp
-	include/ctcss/serialize.hpp
 	include/ctcss/types.hpp
+	include/ctcss/value.hpp
 	include/ctcss/values.hpp)
 file(GLOB_RECURSE CTCSS_CTLARK_HEADERS CONFIGURE_DEPENDS
 	external/compile-time-lark/include/*.hpp)

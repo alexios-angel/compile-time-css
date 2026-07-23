@@ -3,125 +3,29 @@
 
 #include <cstddef>
 
-// CTCSS_NO_GRAMMAR: skip the lark/Earley grammar entirely. The grammar (the
-// compile-time table build in grammar.hpp + the binder) is the expensive part
-// of including this header and is ONLY needed by the compile-time TYPE path
-// (parse<>()/is_valid<>). A translation unit that uses only the runtime VALUE
-// path - parse_value()/query()/parse_length()/parse_color() - defines
-// CTCSS_NO_GRAMMAR and pays none of it. (See ctjs/cthtml for the twins.)
-#include "ctlark.hpp"
-#ifndef CTCSS_NO_GRAMMAR
-#include "ctcss/grammar.hpp"
-#endif
 #include "ctcss/types.hpp"
-#ifndef CTCSS_NO_GRAMMAR
-#include "ctcss/bind.hpp"
-#endif
 #include "ctcss/values.hpp"
 #include "ctcss/match.hpp"
 #include "ctcss/value.hpp"
-#include "ctcss/serialize.hpp"
 
 // ctcss: compile-time CSS.
 //
-//   constexpr auto sheet = ctcss::parse<R"(
-//       p        { color: black; margin: 8px; }
+//   constexpr std::string_view css = R"(
+//       p          { color: black; margin: 8px; }
 //       div.note p { color: red !important; }
-//       #main    { width: 640px; }
-//   )">();
-//
+//       #main      { width: 640px; }
+//   )";
 //   constexpr ctcss::element_ref chain[] = {
-//       {"body"}, {"div", "", "note wide"}, {"p"}};
-//   static_assert(ctcss::query(sheet, chain, "color") == "red");
-//   static_assert(ctcss::query(sheet, chain, "margin") == "8px");
-//   static_assert(ctcss::parse_length("8px").value == 8);
-//   static_assert(!ctcss::is_valid<"p { color red }">);
+//       {"div", "", "note"}, {"p", "", ""}};
+//   static_assert(ctcss::query(ctcss::parse_value(css), chain, "color") == "red");
 //
-// The stylesheet is parsed while your code compiles - malformed CSS is
-// a compile error, or `false` from is_valid - and the sheet is a TYPE
-// whose every accessor is constexpr. Selector matching and the cascade
-// (!important, specificity, source order) are VALUE computations over
-// flattened static views, so they run in static_asserts against a
-// compile-time DOM chain and equally well at runtime, when a script
-// has just flipped a class and styles need resolving again.
-//
-// The grammar layer is ctlark (compile-time Lark): compound selectors
-// are single tokens (whitespace adjacency IS the descendant
-// combinator - see grammar.hpp), the binder (bind.hpp) splits them
-// into typed tag/#id/.classes parts and cooks declaration values, and
-// match.hpp supplies element_ref chains, matches() and query().
-
-namespace ctcss {
-
-// Everything below is the compile-time TYPE path (it needs the grammar). The
-// runtime VALUE path - parse_value/query/parse_length/parse_color/element_ref
-// and the stylesheet TYPES - is available either way from the includes above.
-#ifndef CTCSS_NO_GRAMMAR
-
-#if CTLL_CNTTP_COMPILER_CHECK
-#define CTCSS_STRING_INPUT ctll::fixed_string
-#else
-// C++17: pass a constexpr ctll::fixed_string variable with linkage
-#define CTCSS_STRING_INPUT const auto &
-#endif
-
-// does the input parse as CSS (within the supported subset)?
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr bool is_valid =
-	ctlark::is_valid<detail::css_grammar, input, detail::css_start>;
-
-// what failed and where, when it does not: kind, byte offset, line,
-// column and the expected terminals (kind none = the syntax is fine)
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr ctlark::error_info_t error_info() noexcept {
-	return ctlark::error_info<detail::css_grammar, input, detail::css_start>();
-}
-
-// the rendered diagnostic - location, snippet with a caret, expected
-// terminals - as a static string ("" when the syntax is fine)
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr std::string_view error_message() noexcept {
-	return ctlark::error_message<detail::css_grammar, input, detail::css_start>();
-}
-
-// parse the input into its stylesheet type; invalid CSS fails the build
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr auto parse() noexcept {
-#ifdef CTLARK_VERBOSE_ERRORS
-	(void)ctlark::verbose_report<detail::css_grammar, input, detail::css_start>();
-#endif
-	static_assert(ctlark::is_valid<detail::css_grammar, input, detail::css_start>,
-	              "ctcss: the input is not valid CSS (within the supported subset) - print "
-	              "ctcss::error_message<input>() for the location and the expected tokens");
-	if constexpr (is_valid<input>) {
-		using bound = detail::bind_sheet<
-		    decltype(ctlark::parse<detail::css_grammar, input, detail::css_start>())>;
-		return typename bound::type{};
-	} else {
-		return stylesheet<>{};
-	}
-}
-
-// the ctlark debugging toolbox with the CSS grammar baked in
-namespace debug {
-
-CTLL_EXPORT template <CTCSS_STRING_INPUT input, std::size_t Cap = 4096> constexpr auto traced_parse() noexcept {
-	return ctlark::debug::traced_parse<detail::css_grammar, input, detail::css_start, Cap>();
-}
-
-CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr std::string_view dump_tokens() noexcept {
-	return ctlark::debug::dump_tokens<detail::css_grammar, input, detail::css_start>();
-}
-
-CTLL_EXPORT constexpr std::string_view dump_grammar() noexcept {
-	return ctlark::debug::dump_grammar<detail::css_grammar>();
-}
-
-CTLL_EXPORT template <std::size_t MaxTokens = 1024>
-ctlark::debug::runtime_result parse_runtime(std::string_view in) {
-	return ctlark::debug::parse_runtime<detail::css_grammar, MaxTokens>(in, "start");
-}
-
-} // namespace debug
-
-#endif // CTCSS_NO_GRAMMAR
-
-} // namespace ctcss
+// One parser, usable both ways: parse_value(std::string_view) is a
+// constexpr VALUE parser - resolve the cascade in a static_assert, or
+// load a runtime stylesheet with the same call. Selector matching,
+// specificity and source-order tie-breaks run as ordinary value loops
+// (query); parse_length/parse_color cook the winning declaration's
+// text on demand. At-rules are handled leniently: applying @media
+// blocks flatten in, @keyframes and @font-face are captured for the
+// animation engine.
 
 #endif
