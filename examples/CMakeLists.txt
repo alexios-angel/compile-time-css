@@ -4,6 +4,7 @@ foreach(source ${example-sources})
   get_filename_component(example "${source}" NAME_WE)
   add_executable(ctcss-example-${example} "${source}")
   target_link_libraries(ctcss-example-${example} PRIVATE ctcss::ctcss)
+  target_compile_options(ctcss-example-${example} PRIVATE ${CTCSS_WARNING_OPTIONS})
   if(CTCSS_PCH AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
     target_precompile_headers(ctcss-example-${example} PRIVATE
       "${PROJECT_SOURCE_DIR}/include/ctcss.hpp")

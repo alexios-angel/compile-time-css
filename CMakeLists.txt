@@ -42,11 +42,16 @@ cmake_dependent_option(CTCSS_BUILD_PACKAGE_RPM
   "CTCSS_BUILD_PACKAGE;CTCSS_RPMBUILD_FOUND" OFF)
 
 option(CTCSS_MODULE "build C++ module (experimental)" OFF)
-# the ctlark grammar layer runs an Earley parse in the constant
-# evaluator; the interface carries the raised limits so consumers do
-# not have to know the flags
+# the value parser folds whole stylesheets in the constant evaluator;
+# the interface carries the raised limits so consumers do not have to
+# know the flags
 option(CTCSS_CONSTEXPR_LIMITS "Raise constexpr evaluation limits on the interface" ON)
 option(CTCSS_PCH "Precompile ctcss.hpp for tests and examples" ON)
+
+# the strict flags every test and example builds with (kept off the
+# exported interface so consumers choose their own)
+set(CTCSS_WARNING_OPTIONS
+  $<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-O2;-pedantic;-Wall;-Wextra;-Werror;-Wconversion>)
 
 set(CTCSS_CONSTEXPR_OPTIONS
   $<$<CXX_COMPILER_ID:Clang,AppleClang>:-fconstexpr-steps=500000000;-fconstexpr-depth=1024;-fbracket-depth=2048>
@@ -159,6 +164,29 @@ install(
     "${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake"
     "${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config.cmake"
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
+
+# `cmake --build build --target single-header` regenerates the quom
+# amalgamation (needs python3 with the quom package)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_FOUND)
+    add_custom_target(single-header
+      COMMAND ${Python3_EXECUTABLE} -m quom
+        "${PROJECT_SOURCE_DIR}/include/ctcss.hpp" ctcss.hpp.tmp
+        -I "${PROJECT_SOURCE_DIR}/external/compile-time-lark/include"
+        -I "${PROJECT_SOURCE_DIR}/external/compile-time-lark/include/ctlark"
+        -I "${PROJECT_SOURCE_DIR}/external/compile-time-lark/include/ctll"
+      COMMAND ${CMAKE_COMMAND}
+        -DLICENSE=${PROJECT_SOURCE_DIR}/LICENSE
+        -DBODY=ctcss.hpp.tmp
+        -DOUT=${PROJECT_SOURCE_DIR}/single-header/ctcss.hpp
+        -P "${PROJECT_SOURCE_DIR}/packaging/prepend-license.cmake"
+      COMMAND ${CMAKE_COMMAND} -E rm -f ctcss.hpp.tmp
+      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+      COMMENT "amalgamating single-header/ctcss.hpp (quom)"
+      VERBATIM)
+  endif()
+endif()
 
 if(CTCSS_BUILD_TESTS)
   add_subdirectory(tests)

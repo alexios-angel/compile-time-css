@@ -119,9 +119,9 @@ value parser — one code path, browser-lenient, seconds to compile.)
 Header-only; C++20 or later (constexpr `std::vector`/`std::string`).
 
 ```bash
-make                 # compiles the static_assert test suite
-make CXX=clang++
-cmake -B build && cmake --build build && ctest --test-dir build
+cmake --preset default          # Ninja + Release (use --preset clang for clang++)
+cmake --build --preset default  # compiling the suite IS the test
+ctest --preset default
 ```
 
 Vendor `include/` (plus `include/ctll/utilities.hpp` from the

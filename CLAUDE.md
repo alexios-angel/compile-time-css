@@ -16,9 +16,8 @@ removed 2026-07; the value parser is the only path.)
 ## Build & test — "compiling the tests IS the test"
 `tests/value.cpp` is a `static_assert` suite; compiling it = passing.
 ```bash
-make                # C++20+, seconds (no grammar bake exists anymore)
-make CXX=clang++
-cmake -B build && cmake --build build && ctest --test-dir build
+cmake --preset default && cmake --build --preset default && ctest --preset default
+# (CMake + Ninja is THE build - the Makefiles are gone; --preset clang for clang++)
 ```
 Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
 
@@ -56,6 +55,6 @@ Flags: `-O2 -pedantic -Wall -Wextra -Werror -Wconversion` — stay clean.
   the named binding; see examples/theme.cpp).
 - **ctll is a git SUBMODULE**, never edit here; only utilities.hpp is
   used. Bump = checkout in submodule + commit gitlink.
-- **single-header** — `make single-header` (needs `quom`).
+- **single-header** — `cmake --build build --target single-header` (needs `quom`).
 - **Attribution** — CTLL is Hana Dusíková's (via notre, from CTRE); CSS
   semantics follow the W3C specs. Preserve `NOTICE`/`LICENSE`.
