@@ -34,13 +34,9 @@ Attribution for the historical CTLL engine belongs to Hana Dusikova;
 this file preserves it as required by Section 4(c) of the Apache
 License 2.0 for the versions that shipped it.
 
-The grammar layer is ctlark
-(https://github.com/alexios-angel/compile-time-lark), a git submodule
-under external/: the CSS grammar is written in the Lark grammar
-language, designed by Erez Shinan and the lark-parser project
-(https://github.com/lark-parser/lark, MIT license); see ctlark's
-NOTICE for the full lineage, including the Tablewright-generated
-grammar-of-grammars table.
+(The former grammar layer, ctlark, and its Lark-language heritage -
+Erez Shinan and the lark-parser project - left with the type path;
+this tree has no submodules.)
 
 The CSS language semantics implemented here (selectors, specificity,
 the cascade) follow the W3C CSS specifications.
