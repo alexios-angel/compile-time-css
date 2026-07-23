@@ -24,8 +24,8 @@ namespace ctcss::detail {
 
 // --- span lifts
 
-template <typename Text, size_t From, size_t Len, bool Lower> struct lift_span {
-	template <size_t... I> static constexpr auto go(std::index_sequence<I...>) noexcept {
+template <typename Text, std::size_t From, std::size_t Len, bool Lower> struct lift_span {
+	template <std::size_t... I> static constexpr auto go(std::index_sequence<I...>) noexcept {
 		if constexpr (Lower) {
 			return ctcss::text<ascii_lower(Text::view()[From + I])...>{};
 		} else {
@@ -40,22 +40,22 @@ template <typename Text, size_t From, size_t Len, bool Lower> struct lift_span {
 template <typename Text> struct compound_parse {
 	static constexpr std::string_view s() noexcept { return Text::view(); }
 
-	static constexpr size_t tag_len() noexcept {
-		size_t i = 0;
+	static constexpr std::size_t tag_len() noexcept {
+		std::size_t i = 0;
 		while (i < s().size() && s()[i] != '.' && s()[i] != '#') { ++i; }
 		return i;
 	}
-	static constexpr size_t unit_count() noexcept {
-		size_t n = 0;
+	static constexpr std::size_t unit_count() noexcept {
+		std::size_t n = 0;
 		for (const char c : s()) {
 			if (c == '.' || c == '#') { ++n; }
 		}
 		return n;
 	}
 	// start offset of the K-th [.#] delimiter
-	static constexpr size_t unit_start(size_t k) noexcept {
-		size_t seen = 0;
-		for (size_t i = 0; i < s().size(); ++i) {
+	static constexpr std::size_t unit_start(std::size_t k) noexcept {
+		std::size_t seen = 0;
+		for (std::size_t i = 0; i < s().size(); ++i) {
 			if (s()[i] == '.' || s()[i] == '#') {
 				if (seen == k) { return i; }
 				++seen;
@@ -63,20 +63,20 @@ template <typename Text> struct compound_parse {
 		}
 		return s().size();
 	}
-	static constexpr size_t unit_end(size_t k) noexcept {
-		for (size_t i = unit_start(k) + 1; i < s().size(); ++i) {
+	static constexpr std::size_t unit_end(std::size_t k) noexcept {
+		for (std::size_t i = unit_start(k) + 1; i < s().size(); ++i) {
 			if (s()[i] == '.' || s()[i] == '#') { return i; }
 		}
 		return s().size();
 	}
 
 	using tag_type = typename lift_span<Text, 0, tag_len(), true>::type;
-	template <size_t K> using unit_type =
+	template <std::size_t K> using unit_type =
 	    typename lift_span<Text, unit_start(K) + 1, unit_end(K) - unit_start(K) - 1,
 	                       false>::type;
 
 	// fold the units into (id, classes) - a later #id wins
-	template <size_t K, typename Id, typename Classes> static constexpr auto fold() noexcept {
+	template <std::size_t K, typename Id, typename Classes> static constexpr auto fold() noexcept {
 		if constexpr (K == unit_count()) {
 			return compound<tag_type, Id, Classes>{};
 		} else if constexpr (s()[unit_start(K)] == '#') {
@@ -85,7 +85,7 @@ template <typename Text> struct compound_parse {
 			return fold_class<K, Id>(Classes{});
 		}
 	}
-	template <size_t K, typename Id, typename... Cs>
+	template <std::size_t K, typename Id, typename... Cs>
 	static constexpr auto fold_class(ctll::list<Cs...>) noexcept {
 		return fold<K + 1, Id, ctll::list<Cs..., unit_type<K>>>();
 	}
@@ -125,34 +125,34 @@ struct bind_selector<ctlark::tree<TName, Left, Comp>> {
 template <typename Text> struct cook_value {
 	static constexpr std::string_view s() noexcept { return Text::view(); }
 
-	static constexpr size_t from() noexcept {
-		size_t i = 0;
+	static constexpr std::size_t from() noexcept {
+		std::size_t i = 0;
 		while (i < s().size() && is_css_blank(s()[i])) { ++i; }
 		return i;
 	}
-	static constexpr size_t trimmed_end(size_t end) noexcept {
+	static constexpr std::size_t trimmed_end(std::size_t end) noexcept {
 		while (end > from() && is_css_blank(s()[end - 1])) { --end; }
 		return end;
 	}
 	// does [from, end) end with '!' ws* "important" (case-insensitive)?
-	static constexpr size_t important_bang(size_t end) noexcept {
+	static constexpr std::size_t important_bang(std::size_t end) noexcept {
 		constexpr std::string_view word = "important";
 		if (end - from() < word.size() + 1) { return s().size() + 1; } // sentinel: no
-		size_t w = end - word.size();
-		for (size_t i = 0; i < word.size(); ++i) {
+		std::size_t w = end - word.size();
+		for (std::size_t i = 0; i < word.size(); ++i) {
 			if (ascii_lower(s()[w + i]) != word[i]) { return s().size() + 1; }
 		}
-		size_t b = w;
+		std::size_t b = w;
 		while (b > from() && is_css_blank(s()[b - 1])) { --b; }
 		if (b == from() || s()[b - 1] != '!') { return s().size() + 1; }
 		return b - 1;
 	}
 
-	static constexpr size_t end0() noexcept { return trimmed_end(s().size()); }
+	static constexpr std::size_t end0() noexcept { return trimmed_end(s().size()); }
 	static constexpr bool important() noexcept {
 		return important_bang(end0()) <= s().size();
 	}
-	static constexpr size_t value_end() noexcept {
+	static constexpr std::size_t value_end() noexcept {
 		return important() ? trimmed_end(important_bang(end0())) : end0();
 	}
 

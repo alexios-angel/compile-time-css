@@ -1,6 +1,8 @@
 #ifndef CTCSS__HPP
 #define CTCSS__HPP
 
+#include <cstddef>
+
 // CTCSS_NO_GRAMMAR: skip the lark/Earley grammar entirely. The grammar (the
 // compile-time table build in grammar.hpp + the binder) is the expensive part
 // of including this header and is ONLY needed by the compile-time TYPE path
@@ -99,7 +101,7 @@ CTLL_EXPORT template <CTCSS_STRING_INPUT input> constexpr auto parse() noexcept 
 // the ctlark debugging toolbox with the CSS grammar baked in
 namespace debug {
 
-CTLL_EXPORT template <CTCSS_STRING_INPUT input, size_t Cap = 4096> constexpr auto traced_parse() noexcept {
+CTLL_EXPORT template <CTCSS_STRING_INPUT input, std::size_t Cap = 4096> constexpr auto traced_parse() noexcept {
 	return ctlark::debug::traced_parse<detail::css_grammar, input, detail::css_start, Cap>();
 }
 
@@ -111,7 +113,7 @@ CTLL_EXPORT constexpr std::string_view dump_grammar() noexcept {
 	return ctlark::debug::dump_grammar<detail::css_grammar>();
 }
 
-CTLL_EXPORT template <size_t MaxTokens = 1024>
+CTLL_EXPORT template <std::size_t MaxTokens = 1024>
 ctlark::debug::runtime_result parse_runtime(std::string_view in) {
 	return ctlark::debug::parse_runtime<detail::css_grammar, MaxTokens>(in, "start");
 }

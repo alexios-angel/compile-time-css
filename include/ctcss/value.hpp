@@ -1,6 +1,10 @@
 #ifndef CTCSS__VALUE__HPP
 #define CTCSS__VALUE__HPP
 
+#include <cstddef>
+
+#include <cstdint>
+
 #include "match.hpp"
 #include "values.hpp"
 #ifndef CTCSS_IN_A_MODULE
@@ -42,11 +46,11 @@ struct value_sheet {
 	};
 	struct selector {
 		std::vector<step> steps;
-		int spec = 0;
+		std::int32_t spec = 0;
 	};
 	struct entry {
-		int selector = -1; // index into `selectors`
-		int order = 0;
+		std::int32_t selector = -1; // index into `selectors`
+		std::int32_t order = 0;
 		std::string property;
 		std::string value;
 		bool important = false;
@@ -145,11 +149,11 @@ constexpr std::string_view v_trim(std::string_view s) noexcept {
 	return s.substr(a, b - a);
 }
 
-constexpr int v_spec_of(const value_sheet::selector & s) noexcept {
-	int out = 0;
+constexpr std::int32_t v_spec_of(const value_sheet::selector & s) noexcept {
+	std::int32_t out = 0;
 	for (const auto & st : s.steps) {
 		out += (st.comp.id.empty() ? 0 : 10000) +
-		       static_cast<int>(st.comp.classes.size()) * 100 +
+		       static_cast<std::int32_t>(st.comp.classes.size()) * 100 +
 		       ((st.comp.tag.empty() || st.comp.tag == std::string_view{"*"}) ? 0 : 1);
 	}
 	return out;
@@ -262,7 +266,7 @@ struct css_parser {
 	std::string_view s;
 	std::size_t i = 0;
 	value_sheet & out;
-	int order = 0;
+	std::int32_t order = 0;
 
 	constexpr void skip_ws() {
 		for (;;) {
@@ -295,7 +299,7 @@ struct css_parser {
 	}
 	// skip a balanced { ... } block; enter at the char AFTER the '{'
 	constexpr void skip_block() {
-		int depth = 1;
+		std::int32_t depth = 1;
 		while (i < s.size() && depth > 0) {
 			if (s[i] == '{') { ++depth; }
 			else if (s[i] == '}') { --depth; }
@@ -404,7 +408,7 @@ struct css_parser {
 		add_rule(sel_text, body);
 	}
 	constexpr void add_rule(std::string_view sel_text, std::string_view body) {
-		std::vector<int> sel_indices;
+		std::vector<std::int32_t> sel_indices;
 		std::size_t start = 0;
 		for (std::size_t k = 0; k <= sel_text.size(); ++k) {
 			if (k == sel_text.size() || sel_text[k] == ',') {
@@ -413,7 +417,7 @@ struct css_parser {
 					value_sheet::selector sel = v_parse_selector(piece);
 					if (!sel.steps.empty()) {
 						out.selectors.push_back(std::move(sel));
-						sel_indices.push_back(static_cast<int>(out.selectors.size() - 1));
+						sel_indices.push_back(static_cast<std::int32_t>(out.selectors.size() - 1));
 					}
 				}
 				start = k + 1;
@@ -449,7 +453,7 @@ struct css_parser {
 				decls.push_back({v_str(prop), v_str(val), imp});
 			}
 		}
-		for (const int si : sel_indices) {
+		for (const std::int32_t si : sel_indices) {
 			for (const pv & d : decls) {
 				out.entries.push_back(value_sheet::entry{si, order++, d.prop, d.val, d.imp});
 			}
@@ -504,8 +508,8 @@ CTLL_EXPORT constexpr value_sheet parse_value(std::string_view css) {
 CTLL_EXPORT constexpr std::string_view query(const value_sheet & sheet, const element_ref * chain,
                                              std::size_t n, std::string_view property) noexcept {
 	std::string_view best{};
-	int best_spec = -1;
-	int best_order = -1;
+	std::int32_t best_spec = -1;
+	std::int32_t best_order = -1;
 	bool best_important = false;
 	for (const value_sheet::entry & e : sheet.entries) {
 		if (!detail::ascii_iequals(e.property, property)) { continue; }

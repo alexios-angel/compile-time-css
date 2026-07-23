@@ -1,6 +1,8 @@
 #ifndef CTCSS__VALUES__HPP
 #define CTCSS__VALUES__HPP
 
+#include <cstdint>
+
 #include "types.hpp"
 #ifndef CTCSS_IN_A_MODULE
 #include <cstddef>
@@ -36,7 +38,7 @@ namespace detail {
 constexpr bool is_digit(char c) noexcept {
 	return c >= '0' && c <= '9';
 }
-constexpr int hexval(char c) noexcept {
+constexpr std::int32_t hexval(char c) noexcept {
 	if (c >= '0' && c <= '9') { return c - '0'; }
 	if (c >= 'a' && c <= 'f') { return c - 'a' + 10; }
 	if (c >= 'A' && c <= 'F') { return c - 'A' + 10; }
@@ -45,15 +47,15 @@ constexpr int hexval(char c) noexcept {
 
 // parse a (possibly signed, possibly fractional) decimal number;
 // returns chars consumed (0 = no number)
-constexpr size_t take_number(std::string_view s, double & out) noexcept {
-	size_t i = 0;
+constexpr std::size_t take_number(std::string_view s, double & out) noexcept {
+	std::size_t i = 0;
 	bool neg = false;
 	if (i < s.size() && (s[i] == '+' || s[i] == '-')) {
 		neg = s[i] == '-';
 		++i;
 	}
 	double v = 0;
-	size_t digits = 0;
+	std::size_t digits = 0;
 	while (i < s.size() && is_digit(s[i])) {
 		v = v * 10 + (s[i] - '0');
 		++i;
@@ -79,7 +81,7 @@ constexpr size_t take_number(std::string_view s, double & out) noexcept {
 // "12px", "1.5em", "-2rem", "50%", "0" (unitless zero), "100vh"
 CTLL_EXPORT constexpr length parse_length(std::string_view s) noexcept {
 	double v = 0;
-	const size_t used = detail::take_number(s, v);
+	const std::size_t used = detail::take_number(s, v);
 	if (used == 0) { return {}; }
 	const std::string_view rest = s.substr(used);
 	if (rest.empty()) { return {true, v, unit::none}; }
@@ -101,11 +103,11 @@ CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 	};
 	if (!s.empty() && s[0] == '#') {
 		const std::string_view h = s.substr(1);
-		const auto nib = [&](size_t i) { return detail::hexval(h[i]); };
+		const auto nib = [&](std::size_t i) { return detail::hexval(h[i]); };
 		if (h.size() == 3 || h.size() == 4) {
-			int parts[4] = {0, 0, 0, 15};
-			for (size_t i = 0; i < h.size(); ++i) {
-				const int v = nib(i);
+			std::int32_t parts[4] = {0, 0, 0, 15};
+			for (std::size_t i = 0; i < h.size(); ++i) {
+				const std::int32_t v = nib(i);
 				if (v < 0) { return {}; }
 				parts[i] = v;
 			}
@@ -115,10 +117,10 @@ CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 			        static_cast<unsigned char>(parts[3] * 17)};
 		}
 		if (h.size() == 6 || h.size() == 8) {
-			int parts[4] = {0, 0, 0, 255};
-			for (size_t i = 0; i < h.size(); i += 2) {
-				const int hi = nib(i);
-				const int lo = nib(i + 1);
+			std::int32_t parts[4] = {0, 0, 0, 255};
+			for (std::size_t i = 0; i < h.size(); i += 2) {
+				const std::int32_t hi = nib(i);
+				const std::int32_t lo = nib(i + 1);
 				if (hi < 0 || lo < 0) { return {}; }
 				parts[i / 2] = hi * 16 + lo;
 			}
@@ -134,12 +136,12 @@ CTLL_EXPORT constexpr color parse_color(std::string_view s) noexcept {
 		std::string_view body = s.substr(s[3] == '(' ? 4 : 5);
 		body = body.substr(0, body.size() - 1);
 		double parts[4] = {0, 0, 0, 255};
-		size_t part = 0;
-		size_t i = 0;
+		std::size_t part = 0;
+		std::size_t i = 0;
 		while (part < 4) {
 			while (i < body.size() && detail::is_css_blank(body[i])) { ++i; }
 			double v = 0;
-			const size_t used = detail::take_number(body.substr(i), v);
+			const std::size_t used = detail::take_number(body.substr(i), v);
 			if (used == 0) { return {}; }
 			i += used;
 			parts[part] = part == 3 ? v * 255 : v;

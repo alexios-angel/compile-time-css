@@ -22,20 +22,20 @@ namespace detail {
 
 // --- size pass
 
-template <typename Compound, size_t... I>
-constexpr size_t classes_size(std::index_sequence<I...>) noexcept {
+template <typename Compound, std::size_t... I>
+constexpr std::size_t classes_size(std::index_sequence<I...>) noexcept {
 	return ((1 + decltype(Compound::template class_at<I>())::size()) + ... + 0);
 }
 
-template <typename Compound> constexpr size_t compound_size(Compound) noexcept {
-	size_t total = Compound::tag().size();
+template <typename Compound> constexpr std::size_t compound_size(Compound) noexcept {
+	std::size_t total = Compound::tag().size();
 	if (!Compound::id().empty()) { total += 1 + Compound::id().size(); }
 	total += classes_size<Compound>(std::make_index_sequence<Compound::class_count()>{});
 	return total;
 }
 
-template <typename... Steps> constexpr size_t selector_size(selector<Steps...>) noexcept {
-	size_t total = 0;
+template <typename... Steps> constexpr std::size_t selector_size(selector<Steps...>) noexcept {
+	std::size_t total = 0;
 	((total += (Steps::relation() == rel::self ? 0 : 1) +
 	           compound_size(typename Steps::compound_type{})),
 	 ...);
@@ -43,8 +43,8 @@ template <typename... Steps> constexpr size_t selector_size(selector<Steps...>) 
 }
 
 template <typename... Sels, typename... Decls>
-constexpr size_t rule_size(rule<ctll::list<Sels...>, ctll::list<Decls...>>) noexcept {
-	size_t total = (selector_size(Sels{}) + ... + 0);
+constexpr std::size_t rule_size(rule<ctll::list<Sels...>, ctll::list<Decls...>>) noexcept {
+	std::size_t total = (selector_size(Sels{}) + ... + 0);
 	total += sizeof...(Sels) > 1 ? sizeof...(Sels) - 1 : 0; // commas
 	total += 2;                                             // { }
 	((total += Decls::property().size() + 1 + Decls::value().size() +
@@ -61,7 +61,7 @@ constexpr char * write_view(char * out, std::string_view piece) noexcept {
 	return out;
 }
 
-template <typename Compound, size_t... I>
+template <typename Compound, std::size_t... I>
 constexpr char * write_classes(char * out, std::index_sequence<I...>) noexcept {
 	((*out++ = '.', out = write_view(out, decltype(Compound::template class_at<I>())::view())),
 	 ...);
@@ -105,7 +105,7 @@ constexpr char * write_rule(char * out, rule<ctll::list<Sels...>, ctll::list<Dec
 
 template <typename Sheet> struct serialized_storage;
 template <typename... Rules> struct serialized_storage<stylesheet<Rules...>> {
-	static constexpr size_t length = (rule_size(Rules{}) + ... + 0);
+	static constexpr std::size_t length = (rule_size(Rules{}) + ... + 0);
 	static constexpr std::array<char, length + 1> compute() noexcept {
 		std::array<char, length + 1> out{};
 		char * at = out.data();

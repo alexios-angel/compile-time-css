@@ -1,6 +1,8 @@
 #ifndef CTCSS__TYPES__HPP
 #define CTCSS__TYPES__HPP
 
+#include <cstdint>
+
 #include "../ctll/fixed_string.hpp"
 #include "../ctll/list.hpp" // ctll::list (selector/rule parameter packs)
 #ifndef CTCSS_IN_A_MODULE
@@ -28,7 +30,7 @@ template <auto... Chars> struct text {
 	static constexpr char storage[sizeof...(Chars) + 1]{static_cast<char>(Chars)..., '\0'};
 
 	static constexpr const char * c_str() noexcept { return storage; }
-	static constexpr size_t size() noexcept { return sizeof...(Chars); }
+	static constexpr std::size_t size() noexcept { return sizeof...(Chars); }
 	static constexpr bool empty() noexcept { return sizeof...(Chars) == 0; }
 	static constexpr std::string_view view() noexcept {
 		return std::string_view{storage, sizeof...(Chars)};
@@ -59,13 +61,13 @@ constexpr bool is_css_blank(char c) noexcept {
 
 constexpr bool ascii_iequals(std::string_view a, std::string_view b) noexcept {
 	if (a.size() != b.size()) { return false; }
-	for (size_t i = 0; i < a.size(); ++i) {
+	for (std::size_t i = 0; i < a.size(); ++i) {
 		if (ascii_lower(a[i]) != ascii_lower(b[i])) { return false; }
 	}
 	return true;
 }
 
-template <size_t Index, typename Head, typename... Tail> constexpr auto nth() noexcept {
+template <std::size_t Index, typename Head, typename... Tail> constexpr auto nth() noexcept {
 	if constexpr (Index == 0) {
 		return Head{};
 	} else {
@@ -92,15 +94,15 @@ struct compound<Tag, Id, ctll::list<Classes...>> {
 
 	static constexpr std::string_view tag() noexcept { return Tag::view(); }
 	static constexpr std::string_view id() noexcept { return Id::view(); }
-	static constexpr size_t class_count() noexcept { return sizeof...(Classes); }
-	template <size_t I> static constexpr auto class_at() noexcept {
+	static constexpr std::size_t class_count() noexcept { return sizeof...(Classes); }
+	template <std::size_t I> static constexpr auto class_at() noexcept {
 		static_assert(I < sizeof...(Classes), "ctcss: class index out of range");
 		return detail::nth<I, Classes...>();
 	}
 	// specificity contribution: (ids, classes, types)
-	static constexpr int spec_a() noexcept { return Id::empty() ? 0 : 1; }
-	static constexpr int spec_b() noexcept { return static_cast<int>(sizeof...(Classes)); }
-	static constexpr int spec_c() noexcept {
+	static constexpr std::int32_t spec_a() noexcept { return Id::empty() ? 0 : 1; }
+	static constexpr std::int32_t spec_b() noexcept { return static_cast<std::int32_t>(sizeof...(Classes)); }
+	static constexpr std::int32_t spec_c() noexcept {
 		return (Tag::empty() || Tag::view() == std::string_view{"*"}) ? 0 : 1;
 	}
 };
@@ -111,14 +113,14 @@ template <typename Compound, rel Rel> struct sel_step {
 };
 
 template <typename... Steps> struct selector {
-	static constexpr size_t step_count() noexcept { return sizeof...(Steps); }
-	template <size_t I> static constexpr auto step() noexcept {
+	static constexpr std::size_t step_count() noexcept { return sizeof...(Steps); }
+	template <std::size_t I> static constexpr auto step() noexcept {
 		static_assert(I < sizeof...(Steps), "ctcss: step index out of range");
 		return detail::nth<I, Steps...>();
 	}
 	// packed specificity: ids*10000 + classes*100 + types (enough head-
 	// room for real stylesheets; ties break on source order anyway)
-	static constexpr int specificity() noexcept {
+	static constexpr std::int32_t specificity() noexcept {
 		return ((Steps::compound_type::spec_a() * 10000 +
 		         Steps::compound_type::spec_b() * 100 +
 		         Steps::compound_type::spec_c()) +
@@ -139,13 +141,13 @@ template <typename Prop, typename Value, bool Important> struct declaration {
 template <typename Selectors, typename Decls> struct rule;
 template <typename... Selectors, typename... Decls>
 struct rule<ctll::list<Selectors...>, ctll::list<Decls...>> {
-	static constexpr size_t selector_count() noexcept { return sizeof...(Selectors); }
-	template <size_t I> static constexpr auto selector_at() noexcept {
+	static constexpr std::size_t selector_count() noexcept { return sizeof...(Selectors); }
+	template <std::size_t I> static constexpr auto selector_at() noexcept {
 		static_assert(I < sizeof...(Selectors), "ctcss: selector index out of range");
 		return detail::nth<I, Selectors...>();
 	}
-	static constexpr size_t decl_count() noexcept { return sizeof...(Decls); }
-	template <size_t I> static constexpr auto decl() noexcept {
+	static constexpr std::size_t decl_count() noexcept { return sizeof...(Decls); }
+	template <std::size_t I> static constexpr auto decl() noexcept {
 		static_assert(I < sizeof...(Decls), "ctcss: declaration index out of range");
 		return detail::nth<I, Decls...>();
 	}
@@ -166,7 +168,7 @@ private:
 	template <typename D, typename K> static constexpr bool key_matches(const K & key) noexcept {
 		constexpr auto view = D::property_type::view();
 		if (key.size() != view.size()) { return false; }
-		for (size_t i = 0; i < view.size(); ++i) {
+		for (std::size_t i = 0; i < view.size(); ++i) {
 			const char32_t k = key[i];
 			const char32_t kf = (k >= U'A' && k <= U'Z') ? k - U'A' + U'a' : k;
 			if (static_cast<char32_t>(static_cast<unsigned char>(view[i])) != kf) {
@@ -178,8 +180,8 @@ private:
 };
 
 template <typename... Rules> struct stylesheet {
-	static constexpr size_t rule_count() noexcept { return sizeof...(Rules); }
-	template <size_t I> static constexpr auto rule_at() noexcept {
+	static constexpr std::size_t rule_count() noexcept { return sizeof...(Rules); }
+	template <std::size_t I> static constexpr auto rule_at() noexcept {
 		static_assert(I < sizeof...(Rules), "ctcss: rule index out of range");
 		return detail::nth<I, Rules...>();
 	}
